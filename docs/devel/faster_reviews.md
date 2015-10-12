@@ -38,7 +38,7 @@ being written down in the hope that it will occasionally remind people of "best
 practices" around code reviews.
 
 You've just had a brilliant idea on how to make Kubernetes better.  Let's call
-that idea "FeatureX".  Feature X is not even that complicated.  You have a
+that idea "FeatureX".  FeatureX is not even that complicated.  You have a
 pretty good idea of how to implement it.  You jump in and implement it, fixing a
 bunch of stuff along the way.  You send your PR - this is awesome!  And it sits.
 And sits.  A week goes by and nobody reviews it.  Finally someone offers a few
