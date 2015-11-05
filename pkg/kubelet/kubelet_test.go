@@ -27,6 +27,7 @@ import (
 	"path"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -162,6 +163,8 @@ func newTestPods(count int) []*api.Pod {
 			ObjectMeta: api.ObjectMeta{
 				UID:  types.UID(10000 + i),
 				Name: fmt.Sprintf("pod%d", i),
+				// Add UID so that the pods won't overlap each other in podManager.SetPod(pods)
+				UID: types.UID(strconv.Itoa(i)),
 			},
 		}
 	}
@@ -3523,6 +3526,7 @@ func TestIsPodPastActiveDeadline(t *testing.T) {
 	pods[0].Spec.ActiveDeadlineSeconds = &exceededActiveDeadlineSeconds
 	pods[1].Status.StartTime = &startTime
 	pods[1].Spec.ActiveDeadlineSeconds = &notYetActiveDeadlineSeconds
+
 	tests := []struct {
 		pod      *api.Pod
 		expected bool
@@ -4012,5 +4016,54 @@ func TestExtractBandwidthResources(t *testing.T) {
 		if !reflect.DeepEqual(egress, test.expectedEgress) {
 			t.Errorf("expected: %v, saw: %v", egress, test.expectedEgress)
 		}
+	}
+}
+
+func TestGetPodsToSync(t *testing.T) {
+	testKubelet := newTestKubelet(t)
+	kubelet := testKubelet.kubelet
+	pods := newTestPods(5)
+
+	exceededActiveDeadlineSeconds := int64(30)
+	notYetActiveDeadlineSeconds := int64(120)
+	now := unversioned.Now()
+	startTime := unversioned.NewTime(now.Time.Add(-1 * time.Minute))
+	pods[0].Status.StartTime = &startTime
+	pods[0].Spec.ActiveDeadlineSeconds = &exceededActiveDeadlineSeconds
+	pods[1].Status.StartTime = &startTime
+	pods[1].Spec.ActiveDeadlineSeconds = &notYetActiveDeadlineSeconds
+	pods[2].Status.StartTime = &startTime
+	pods[2].Spec.ActiveDeadlineSeconds = &exceededActiveDeadlineSeconds
+
+	kubelet.podManager.SetPods(pods)
+	kubelet.workQueue.Enqueue(pods[2].UID, 0)
+	kubelet.workQueue.Enqueue(pods[3].UID, 0)
+	kubelet.workQueue.Enqueue(pods[4].UID, time.Hour)
+
+	expectedPodsUID := []types.UID{"0", "2", "3"}
+
+	podsToSync := kubelet.getPodsToSync()
+
+	if len(podsToSync) == len(expectedPodsUID) {
+		var rightNum int
+		for _, podUID := range expectedPodsUID {
+			for _, podToSync := range podsToSync {
+				if podToSync.UID == podUID {
+					rightNum++
+					break
+				}
+			}
+		}
+		if rightNum != len(expectedPodsUID) {
+			// Just for report error
+			podsToSyncUID := []types.UID{}
+			for _, podToSync := range podsToSync {
+				podsToSyncUID = append(podsToSyncUID, podToSync.UID)
+			}
+			t.Errorf("expected pods %v to sync, got %v", expectedPodsUID, podsToSyncUID)
+		}
+
+	} else {
+		t.Errorf("expected %d pods to sync, got %d", 3, len(podsToSync))
 	}
 }

@@ -1513,6 +1513,9 @@ func (kl *Kubelet) syncPod(pod *api.Pod, mirrorPod *api.Pod, runningPod kubecont
 	} else {
 		var err error
 		podStatus, err = kl.generatePodStatus(pod)
+		// TODO (random-liu) It's strange that generatePodStatus generates some podStatus in
+		// the phase Failed, Pending etc, even with empty ContainerStatuses but still keep going
+		// on. Maybe need refactor here.
 		if err != nil {
 			glog.Errorf("Unable to get status for pod %q (uid %q): %v", podFullName, uid, err)
 			return err
@@ -1762,6 +1765,50 @@ func (kl *Kubelet) pastActiveDeadline(pod *api.Pod) bool {
 		}
 	}
 	return false
+}
+
+// Get pods which should be resynchronized. Move the logic here so as to make it testable and make the main sync loop
+// simple and clear.
+// Currently, the following pod should be resynchronized:
+//   * pod whose work is ready.
+//   * pod past the active deadline.
+func (kl *Kubelet) getPodsToSync() []*api.Pod {
+	// Get all pods past the active deadline
+	allPods := kl.podManager.GetPods()
+	var podsToFail []*api.Pod
+	for _, pod := range allPods {
+		if !kl.pastActiveDeadline(pod) {
+			continue
+		}
+		podsToFail = append(podsToFail, pod)
+	}
+
+	// Get all pods whose work are ready
+	podUIDs := kl.workQueue.GetWork()
+	var podsToWork []*api.Pod
+	for _, uid := range podUIDs {
+		if pod, ok := kl.podManager.GetPodByUID(uid); ok {
+			podsToWork = append(podsToWork, pod)
+		}
+	}
+
+	// Merge the pod lists
+	podsToSync := podsToWork
+	for _, podToFail := range podsToFail {
+		var found bool
+		for _, podToWork := range podsToWork {
+			// Because podToFail and podToWork both come from podManager,
+			// we can just compare them although they are pointers.
+			if podToFail == podToWork {
+				found = true
+				break
+			}
+		}
+		if !found {
+			podsToSync = append(podsToSync, podToFail)
+		}
+	}
+	return podsToSync
 }
 
 // Returns true if pod is in the terminated state ("Failed" or "Succeeded").
@@ -2118,13 +2165,7 @@ func (kl *Kubelet) syncLoopIteration(updates <-chan kubetypes.PodUpdate, handler
 			glog.Errorf("Kubelet does not support snapshot update")
 		}
 	case <-syncCh:
-		podUIDs := kl.workQueue.GetWork()
-		var podsToSync []*api.Pod
-		for _, uid := range podUIDs {
-			if pod, ok := kl.podManager.GetPodByUID(uid); ok {
-				podsToSync = append(podsToSync, pod)
-			}
-		}
+		podsToSync := kl.getPodsToSync()
 		if len(podsToSync) == 0 {
 			break
 		}
