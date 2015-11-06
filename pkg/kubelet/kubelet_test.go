@@ -27,7 +27,6 @@ import (
 	"path"
 	"reflect"
 	"sort"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -163,8 +162,6 @@ func newTestPods(count int) []*api.Pod {
 			ObjectMeta: api.ObjectMeta{
 				UID:  types.UID(10000 + i),
 				Name: fmt.Sprintf("pod%d", i),
-				// Add UID so that the pods won't overlap each other in podManager.SetPod(pods)
-				UID: types.UID(strconv.Itoa(i)),
 			},
 		}
 	}
@@ -3526,7 +3523,6 @@ func TestIsPodPastActiveDeadline(t *testing.T) {
 	pods[0].Spec.ActiveDeadlineSeconds = &exceededActiveDeadlineSeconds
 	pods[1].Status.StartTime = &startTime
 	pods[1].Spec.ActiveDeadlineSeconds = &notYetActiveDeadlineSeconds
-
 	tests := []struct {
 		pod      *api.Pod
 		expected bool
@@ -4023,6 +4019,10 @@ func TestGetPodsToSync(t *testing.T) {
 	testKubelet := newTestKubelet(t)
 	kubelet := testKubelet.kubelet
 	pods := newTestPods(5)
+	podUIDs := []types.UID{}
+	for _, pod := range pods {
+		podUIDs = append(podUIDs, pod.UID)
+	}
 
 	exceededActiveDeadlineSeconds := int64(30)
 	notYetActiveDeadlineSeconds := int64(120)
@@ -4040,7 +4040,7 @@ func TestGetPodsToSync(t *testing.T) {
 	kubelet.workQueue.Enqueue(pods[3].UID, 0)
 	kubelet.workQueue.Enqueue(pods[4].UID, time.Hour)
 
-	expectedPodsUID := []types.UID{"0", "2", "3"}
+	expectedPodsUID := []types.UID{pods[0].UID, pods[2].UID, pods[3].UID}
 
 	podsToSync := kubelet.getPodsToSync()
 

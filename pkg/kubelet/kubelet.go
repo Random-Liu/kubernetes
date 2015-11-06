@@ -1773,39 +1773,21 @@ func (kl *Kubelet) pastActiveDeadline(pod *api.Pod) bool {
 //   * pod whose work is ready.
 //   * pod past the active deadline.
 func (kl *Kubelet) getPodsToSync() []*api.Pod {
-	// Get all pods past the active deadline
 	allPods := kl.podManager.GetPods()
-	var podsToFail []*api.Pod
-	for _, pod := range allPods {
-		if !kl.pastActiveDeadline(pod) {
-			continue
-		}
-		podsToFail = append(podsToFail, pod)
-	}
-
-	// Get all pods whose work are ready
 	podUIDs := kl.workQueue.GetWork()
-	var podsToWork []*api.Pod
-	for _, uid := range podUIDs {
-		if pod, ok := kl.podManager.GetPodByUID(uid); ok {
-			podsToWork = append(podsToWork, pod)
-		}
-	}
-
-	// Merge the pod lists
-	podsToSync := podsToWork
-	for _, podToFail := range podsToFail {
-		var found bool
-		for _, podToWork := range podsToWork {
-			// Because podToFail and podToWork both come from podManager,
-			// we can just compare them although they are pointers.
-			if podToFail == podToWork {
-				found = true
-				break
+	var podsToSync []*api.Pod
+	for _, pod := range allPods {
+		if kl.pastActiveDeadline(pod) {
+			// The pod has passed active deadline
+			podsToSync = append(podsToSync, pod)
+		} else {
+			for _, uid := range podUIDs {
+				if pod.UID == uid {
+					// The work of the pod is ready
+					podsToSync = append(podsToSync, pod)
+					break
+				}
 			}
-		}
-		if !found {
-			podsToSync = append(podsToSync, podToFail)
 		}
 	}
 	return podsToSync
