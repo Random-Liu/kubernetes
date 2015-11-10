@@ -21,6 +21,8 @@ import (
 	"strings"
 
 	docker "github.com/fsouza/go-dockerclient"
+	"k8s.io/kubernetes/pkg/api"
+	"k8s.io/kubernetes/pkg/api/unversioned"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
 	kubetypes "k8s.io/kubernetes/pkg/kubelet/types"
 )
@@ -73,4 +75,32 @@ func toRuntimeImage(image *docker.APIImages) (*kubecontainer.Image, error) {
 		Tags: image.RepoTags,
 		Size: image.VirtualSize,
 	}, nil
+}
+
+// convert RawContainerSTatus to api.ContainerStatus.
+func rawToAPIContainerStatus(raw *kubecontainer.RawContainerStatus) *api.ContainerStatus {
+	containerID := DockerPrefix + raw.ID.ID
+	status := api.ContainerStatus{
+		Name:         raw.Name,
+		RestartCount: raw.RestartCount,
+		Image:        raw.Image,
+		ImageID:      raw.ImageID,
+		ContainerID:  containerID,
+	}
+	switch raw.Status {
+	case kubecontainer.ContainerStatusRunning:
+		status.State.Running = &api.ContainerStateRunning{StartedAt: unversioned.NewTime(raw.StartedAt)}
+	case kubecontainer.ContainerStatusExited:
+		status.State.Terminated = &api.ContainerStateTerminated{
+			ExitCode:    raw.ExitCode,
+			Reason:      raw.Reason,
+			Message:     raw.Message,
+			StartedAt:   unversioned.NewTime(raw.StartedAt),
+			FinishedAt:  unversioned.NewTime(raw.FinishedAt),
+			ContainerID: containerID,
+		}
+	default:
+		status.State.Waiting = &api.ContainerStateWaiting{}
+	}
+	return &status
 }

@@ -1245,10 +1245,8 @@ func TestSyncPodBackoff(t *testing.T) {
 		}
 	}
 }
-
 func TestGetPodCreationFailureReason(t *testing.T) {
 	dm, fakeDocker := newTestDockerManager()
-
 	// Inject the creation failure error to docker.
 	failureReason := "RunContainerError"
 	fakeDocker.Errors = map[string]error{
