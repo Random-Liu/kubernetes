@@ -1767,26 +1767,25 @@ func (kl *Kubelet) pastActiveDeadline(pod *api.Pod) bool {
 	return false
 }
 
-// Get pods which should be resynchronized. Move the logic here so as to make it testable and make the main sync loop
-// simple and clear.
-// Currently, the following pod should be resynchronized:
+// Get pods which should be resynchronized. Currently, the following pod should be resynchronized:
 //   * pod whose work is ready.
 //   * pod past the active deadline.
 func (kl *Kubelet) getPodsToSync() []*api.Pod {
 	allPods := kl.podManager.GetPods()
 	podUIDs := kl.workQueue.GetWork()
+	podUIDSet := sets.NewString()
+	for _, podUID := range podUIDs {
+		podUIDSet.Insert(string(podUID))
+	}
 	var podsToSync []*api.Pod
 	for _, pod := range allPods {
 		if kl.pastActiveDeadline(pod) {
 			// The pod has passed active deadline
 			podsToSync = append(podsToSync, pod)
 		} else {
-			for _, uid := range podUIDs {
-				if pod.UID == uid {
-					// The work of the pod is ready
-					podsToSync = append(podsToSync, pod)
-					break
-				}
+			// The work of the pod is ready
+			if podUIDSet.Has(string(pod.UID)) {
+				podsToSync = append(podsToSync, pod)
 			}
 		}
 	}
