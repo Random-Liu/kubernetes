@@ -1561,6 +1561,7 @@ func (kl *Kubelet) syncPod(pod *api.Pod, mirrorPod *api.Pod, runningPod kubecont
 	// it's OK to pretend like the kubelet started them after it restarted.
 
 	var podStatus api.PodStatus
+
 	if updateType == kubetypes.SyncPodCreate {
 		// This is the first time we are syncing the pod. Record the latency
 		// since kubelet first saw the pod if firstSeenTime is set.
@@ -1573,15 +1574,15 @@ func (kl *Kubelet) syncPod(pod *api.Pod, mirrorPod *api.Pod, runningPod kubecont
 		kl.statusManager.SetPodStatus(pod, podStatus)
 		glog.V(3).Infof("Not generating pod status for new pod %q", podFullName)
 	} else {
-		var err error
-		podStatus, err = kl.generatePodStatus(pod)
-		// TODO (random-liu) It's strange that generatePodStatus generates some podStatus in
-		// the phase Failed, Pending etc, even with empty ContainerStatuses but still keep going
-		// on. Maybe need refactor here.
+		// Because we never used Phase, Condition, HostIP and PodIP in the following logic.
+		// In fact generatePodStatus should be called before updating pod status to apiserver.
+		// Here we just need GetPodStatus().
+		pPodStatus, err := kl.containerRuntime.GetPodStatus(pod)
 		if err != nil {
 			glog.Errorf("Unable to get status for pod %q (uid %q): %v", podFullName, uid, err)
 			return err
 		}
+		podStatus = *pPodStatus
 	}
 
 	pullSecrets, err := kl.getPullSecretsForPod(pod)

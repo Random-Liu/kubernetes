@@ -447,6 +447,7 @@ func (dm *DockerManager) ConvertRawToPodStatus(pod *api.Pod, rawStatus *kubecont
 	}
 
 	containerDone := sets.NewString()
+	// NOTE: (random-liu) The Pod IP is generated in kubelet.generatePodStatus(), we have no rawStatus.IP now
 	podStatus.PodIP = rawStatus.IP
 	for _, raw := range rawStatus.ContainerStatuses {
 		cName := raw.Name
@@ -457,7 +458,7 @@ func (dm *DockerManager) ConvertRawToPodStatus(pod *api.Pod, rawStatus *kubecont
 		if containerDone.Has(cName) {
 			continue
 		}
-		status := rawToAPIContainerStatus(&raw)
+		status := rawToAPIContainerStatus(raw)
 		if existing, found := statuses[cName]; found {
 			existing.LastTerminationState = status.State
 			containerDone.Insert(cName)
@@ -2069,7 +2070,7 @@ func (dm *DockerManager) GetRawPodStatus(uid types.UID, name, namespace string) 
 	//	we can only assume their restart count is 0.
 	// Anyhow, we only promised "best-effort" restart count reporting, we can just ignore
 	// these limitations now.
-	var rawStatuses []kubecontainer.RawContainerStatus
+	var rawStatuses []*kubecontainer.RawContainerStatus
 	// We have added labels like pod name and pod namespace, it seems that we can do filtered list here.
 	// However, there may be some old containers without these labels, so at least now we can't do that.
 	// TODO (random-liu) Do only one list and pass in the list result in the future
@@ -2098,7 +2099,7 @@ func (dm *DockerManager) GetRawPodStatus(uid types.UID, name, namespace string) 
 		if err != nil {
 			return podStatus, err
 		}
-		rawStatuses = append(rawStatuses, *result)
+		rawStatuses = append(rawStatuses, result)
 		if ip != "" {
 			podStatus.IP = ip
 		}
