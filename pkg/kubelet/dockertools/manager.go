@@ -1759,7 +1759,7 @@ func (dm *DockerManager) clearReasonCache(pod *api.Pod, container *api.Container
 }
 
 // Sync the running pod to match the specified desired pod.
-func (dm *DockerManager) SyncPod(pod *api.Pod, runningPod kubecontainer.Pod, podStatus api.PodStatus, pullSecrets []api.Secret, backOff *util.Backoff) error {
+func (dm *DockerManager) SyncPod(pod *api.Pod, runningPod kubecontainer.Pod, podStatus api.PodStatus, _ *kubecontainer.RawPodStatus, pullSecrets []api.Secret, backOff *util.Backoff) error {
 	start := time.Now()
 	defer func() {
 		metrics.ContainerManagerLatency.WithLabelValues("SyncPod").Observe(metrics.SinceInMicroseconds(start))
@@ -2107,4 +2107,15 @@ func (dm *DockerManager) GetRawPodStatus(uid types.UID, name, namespace string) 
 
 	podStatus.ContainerStatuses = rawStatuses
 	return podStatus, nil
+}
+
+func (dm *DockerManager) GetRawAndAPIPodStatus(pod *api.Pod) (*api.PodStatus, *kubecontainer.RawPodStatus, error) {
+	// Get the raw pod status.
+	rawStatus, err := dm.GetRawPodStatus(pod.UID, pod.Name, pod.Namespace)
+	if err != nil {
+		return nil, nil, err
+	}
+	var podStatus *api.PodStatus
+	podStatus, err = dm.ConvertRawToPodStatus(pod, rawStatus)
+	return podStatus, rawStatus, err
 }

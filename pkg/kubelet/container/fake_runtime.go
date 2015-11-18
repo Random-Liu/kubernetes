@@ -165,7 +165,7 @@ func (f *FakeRuntime) GetPods(all bool) ([]*Pod, error) {
 	return f.PodList, f.Err
 }
 
-func (f *FakeRuntime) SyncPod(pod *api.Pod, _ Pod, _ api.PodStatus, _ []api.Secret, backOff *util.Backoff) error {
+func (f *FakeRuntime) SyncPod(pod *api.Pod, _ Pod, _ api.PodStatus, _ *RawPodStatus, _ []api.Secret, backOff *util.Backoff) error {
 	f.Lock()
 	defer f.Unlock()
 
@@ -248,6 +248,17 @@ func (f *FakeRuntime) ConvertRawToPodStatus(_ *api.Pod, _ *RawPodStatus) (*api.P
 	f.CalledFunctions = append(f.CalledFunctions, "ConvertRawToPodStatus")
 	status := f.PodStatus
 	return &status, f.Err
+}
+
+func (f *FakeRuntime) GetRawAndAPIPodStatus(_ *api.Pod) (*api.PodStatus, *RawPodStatus, error) {
+	f.Lock()
+	defer f.Unlock()
+
+	// This is only a temporary function, it should be logged as GetPodStatus
+	f.CalledFunctions = append(f.CalledFunctions, "GetPodStatus")
+	podStatus := f.PodStatus
+	rawStatus := f.RawPodStatus
+	return &podStatus, &rawStatus, f.Err
 }
 
 func (f *FakeRuntime) ExecInContainer(containerID ContainerID, cmd []string, stdin io.Reader, stdout, stderr io.WriteCloser, tty bool) error {

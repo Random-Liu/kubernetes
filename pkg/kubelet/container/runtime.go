@@ -85,7 +85,7 @@ type Runtime interface {
 	// GarbageCollect removes dead containers using the specified container gc policy
 	GarbageCollect(gcPolicy ContainerGCPolicy) error
 	// Syncs the running pod into the desired pod.
-	SyncPod(pod *api.Pod, runningPod Pod, podStatus api.PodStatus, pullSecrets []api.Secret, backOff *util.Backoff) error
+	SyncPod(pod *api.Pod, runningPod Pod, podStatus api.PodStatus, rawPodStatus *RawPodStatus, pullSecrets []api.Secret, backOff *util.Backoff) error
 	// KillPod kills all the containers of a pod. Pod may be nil, running pod must not be.
 	KillPod(pod *api.Pod, runningPod Pod) error
 	// GetPodStatus retrieves the status of the pod, including the information of
@@ -106,6 +106,9 @@ type Runtime interface {
 	// TODO: Deprecate this function once we generalize the logic for all
 	// container runtimes in kubelet.
 	ConvertRawToPodStatus(*api.Pod, *RawPodStatus) (*api.PodStatus, error)
+	// Return both api.PodStatus and RawPodStatus, this is just a temporary function.
+	// TODO (random-liu) Remove this interface later
+	GetRawAndAPIPodStatus(*api.Pod) (*api.PodStatus, *RawPodStatus, error)
 	// PullImage pulls an image from the network to local storage using the supplied
 	// secrets if necessary.
 	PullImage(image ImageSpec, pullSecrets []api.Secret) error

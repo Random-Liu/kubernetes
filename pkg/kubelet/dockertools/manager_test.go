@@ -548,7 +548,7 @@ func runSyncPod(t *testing.T, dm *DockerManager, fakeDocker *FakeDockerClient, p
 	}
 	runningPod := kubecontainer.Pods(runningPods).FindPodByID(pod.UID)
 
-	podStatus, err := dm.GetPodStatus(pod)
+	podStatus, rawPodStatus, err := dm.GetRawAndAPIPodStatus(pod)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -556,7 +556,7 @@ func runSyncPod(t *testing.T, dm *DockerManager, fakeDocker *FakeDockerClient, p
 	if backOff == nil {
 		backOff = util.NewBackOff(time.Second, time.Minute)
 	}
-	err = dm.SyncPod(pod, runningPod, *podStatus, []api.Secret{}, backOff)
+	err = dm.SyncPod(pod, runningPod, *podStatus, rawPodStatus, []api.Secret{}, backOff)
 	if err != nil && !expectErr {
 		t.Errorf("unexpected error: %v", err)
 	} else if err == nil && expectErr {

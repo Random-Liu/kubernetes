@@ -1561,6 +1561,7 @@ func (kl *Kubelet) syncPod(pod *api.Pod, mirrorPod *api.Pod, runningPod kubecont
 	// it's OK to pretend like the kubelet started them after it restarted.
 
 	var podStatus api.PodStatus
+	var rawPodStatus *kubecontainer.RawPodStatus
 
 	if updateType == kubetypes.SyncPodCreate {
 		// This is the first time we are syncing the pod. Record the latency
@@ -1572,17 +1573,23 @@ func (kl *Kubelet) syncPod(pod *api.Pod, mirrorPod *api.Pod, runningPod kubecont
 		podStatus = pod.Status
 		podStatus.StartTime = &unversioned.Time{Time: start}
 		kl.statusManager.SetPodStatus(pod, podStatus)
+		rawPodStatus = &kubecontainer.RawPodStatus{
+			ID:        pod.UID,
+			Name:      pod.Name,
+			Namespace: pod.Namespace,
+		}
 		glog.V(3).Infof("Not generating pod status for new pod %q", podFullName)
 	} else {
 		// Because we never used Phase, Condition, HostIP and PodIP in the following logic.
 		// In fact generatePodStatus should be called before updating pod status to apiserver.
 		// Here we just need GetPodStatus().
-		pPodStatus, err := kl.containerRuntime.GetPodStatus(pod)
+		podStatusPtr, rawPodStatusPtr, err := kl.containerRuntime.GetRawAndAPIPodStatus(pod)
 		if err != nil {
 			glog.Errorf("Unable to get status for pod %q (uid %q): %v", podFullName, uid, err)
 			return err
 		}
-		podStatus = *pPodStatus
+		podStatus = *podStatusPtr
+		rawPodStatus = rawPodStatusPtr
 	}
 
 	pullSecrets, err := kl.getPullSecretsForPod(pod)
@@ -1591,7 +1598,7 @@ func (kl *Kubelet) syncPod(pod *api.Pod, mirrorPod *api.Pod, runningPod kubecont
 		return err
 	}
 
-	err = kl.containerRuntime.SyncPod(pod, runningPod, podStatus, pullSecrets, kl.backOff)
+	err = kl.containerRuntime.SyncPod(pod, runningPod, podStatus, rawPodStatus, pullSecrets, kl.backOff)
 	if err != nil {
 		return err
 	}
