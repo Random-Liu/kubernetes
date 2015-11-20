@@ -1583,7 +1583,7 @@ func (kl *Kubelet) syncPod(pod *api.Pod, mirrorPod *api.Pod, runningPod kubecont
 		// Because we never used Phase, Condition, HostIP and PodIP in the following logic.
 		// In fact generatePodStatus should be called before updating pod status to apiserver.
 		// Here we just need GetPodStatus().
-		podStatusPtr, rawPodStatusPtr, err := kl.containerRuntime.GetRawAndAPIPodStatus(pod)
+		rawPodStatusPtr, podStatusPtr, err := kl.containerRuntime.GetRawAndAPIPodStatus(pod)
 		if err != nil {
 			glog.Errorf("Unable to get status for pod %q (uid %q): %v", podFullName, uid, err)
 			return err
@@ -1613,7 +1613,7 @@ func (kl *Kubelet) syncPod(pod *api.Pod, mirrorPod *api.Pod, runningPod kubecont
 		} else if kl.shaper != nil {
 			status, found := kl.statusManager.GetPodStatus(pod.UID)
 			if !found {
-				statusPtr, err := kl.containerRuntime.GetPodStatus(pod)
+				statusPtr, err := kl.containerRuntime.GetAPIPodStatus(pod)
 				if err != nil {
 					glog.Errorf("Error getting pod for bandwidth shaping")
 					return err
@@ -1720,7 +1720,7 @@ func (kl *Kubelet) cleanupBandwidthLimits(allPods []*api.Pod) error {
 		}
 		status, found := kl.statusManager.GetPodStatus(pod.UID)
 		if !found {
-			statusPtr, err := kl.containerRuntime.GetPodStatus(pod)
+			statusPtr, err := kl.containerRuntime.GetAPIPodStatus(pod)
 			if err != nil {
 				return err
 			}
@@ -2949,7 +2949,7 @@ func (kl *Kubelet) generatePodStatus(pod *api.Pod) (api.PodStatus, error) {
 	}
 
 	spec := &pod.Spec
-	podStatus, err := kl.containerRuntime.GetPodStatus(pod)
+	podStatus, err := kl.containerRuntime.GetAPIPodStatus(pod)
 
 	if err != nil {
 		// Error handling

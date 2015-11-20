@@ -844,9 +844,9 @@ func (r *Runtime) KillPod(pod *api.Pod, runningPod kubecontainer.Pod) error {
 	return nil
 }
 
-// getPodStatus reads the service file and invokes 'rkt status $UUID' to get the
+// getAPIPodStatus reads the service file and invokes 'rkt status $UUID' to get the
 // pod's status.
-func (r *Runtime) getPodStatus(serviceName string) (*api.PodStatus, error) {
+func (r *Runtime) getAPIPodStatus(serviceName string) (*api.PodStatus, error) {
 	var status api.PodStatus
 
 	// TODO(yifan): Get rkt uuid from the service file name.
@@ -870,10 +870,10 @@ func (r *Runtime) getPodStatus(serviceName string) (*api.PodStatus, error) {
 	return &status, nil
 }
 
-// GetPodStatus returns the status of the given pod.
-func (r *Runtime) GetPodStatus(pod *api.Pod) (*api.PodStatus, error) {
+// GetAPIPodStatus returns the status of the given pod.
+func (r *Runtime) GetAPIPodStatus(pod *api.Pod) (*api.PodStatus, error) {
 	serviceName := makePodServiceFileName(pod.UID)
-	return r.getPodStatus(serviceName)
+	return r.getAPIPodStatus(serviceName)
 }
 
 func (r *Runtime) Type() string {
@@ -1418,12 +1418,12 @@ func (r *Runtime) GetRawPodStatus(uid types.UID, name, namespace string) (*kubec
 	return nil, fmt.Errorf("Not implemented yet")
 }
 
-func (r *Runtime) ConvertRawToPodStatus(_ *api.Pod, _ *kubecontainer.RawPodStatus) (*api.PodStatus, error) {
+func (r *Runtime) ConvertRawToAPIPodStatus(_ *api.Pod, _ *kubecontainer.RawPodStatus) (*api.PodStatus, error) {
 	return nil, fmt.Errorf("Not implemented yet")
 }
 
-func (r *Runtime) GetRawAndAPIPodStatus(pod *api.Pod) (*api.PodStatus, *kubecontainer.RawPodStatus, error) {
-	podStatus, err := r.GetPodStatus(pod)
-	return podStatus, nil, err
+func (r *Runtime) GetRawAndAPIPodStatus(pod *api.Pod) (*kubecontainer.RawPodStatus, *api.PodStatus, error) {
+	podStatus, err := r.GetAPIPodStatus(pod)
+	return nil, podStatus, err
 
 }

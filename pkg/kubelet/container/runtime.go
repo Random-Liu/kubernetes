@@ -85,16 +85,14 @@ type Runtime interface {
 	// GarbageCollect removes dead containers using the specified container gc policy
 	GarbageCollect(gcPolicy ContainerGCPolicy) error
 	// Syncs the running pod into the desired pod.
-	SyncPod(pod *api.Pod, runningPod Pod, podStatus api.PodStatus, rawPodStatus *RawPodStatus, pullSecrets []api.Secret, backOff *util.Backoff) error
+	SyncPod(pod *api.Pod, runningPod Pod, apiPodStatus api.PodStatus, rawPodStatus *RawPodStatus, pullSecrets []api.Secret, backOff *util.Backoff) error
 	// KillPod kills all the containers of a pod. Pod may be nil, running pod must not be.
 	KillPod(pod *api.Pod, runningPod Pod) error
-	// GetPodStatus retrieves the status of the pod, including the information of
+	// GetAPIPodStatus retrieves the api.PodStatus of the pod, including the information of
 	// all containers in the pod. Clients of this interface assume the
 	// containers' statuses in a pod always have a deterministic ordering
 	// (e.g., sorted by name).
-	// TODO: Rename this to GetAPIPodStatus, and eventually deprecate the
-	// function in favor of GetRawPodStatus.
-	GetPodStatus(*api.Pod) (*api.PodStatus, error)
+	GetAPIPodStatus(*api.Pod) (*api.PodStatus, error)
 	// GetRawPodStatus retrieves the status of the pod, including the
 	// information of all containers in the pod that are visble in Runtime.
 	// TODO: Rename this to GetPodStatus to replace the original function.
@@ -102,13 +100,12 @@ type Runtime interface {
 	// ConvertRawToPodStatus converts the RawPodStatus object to api.PodStatus.
 	// This function is needed because Docker generates some high-level and/or
 	// pod-level information for api.PodStatus (e.g., check whether the image
-	// exists to determine the reason).
-	// TODO: Deprecate this function once we generalize the logic for all
-	// container runtimes in kubelet.
-	ConvertRawToPodStatus(*api.Pod, *RawPodStatus) (*api.PodStatus, error)
+	// exists to determine the reason). We should try generalizing the logic
+	// for all container runtimes in kubelet and remove this funciton.
+	ConvertRawToAPIPodStatus(*api.Pod, *RawPodStatus) (*api.PodStatus, error)
 	// Return both api.PodStatus and RawPodStatus, this is just a temporary function.
 	// TODO (random-liu) Remove this interface later
-	GetRawAndAPIPodStatus(*api.Pod) (*api.PodStatus, *RawPodStatus, error)
+	GetRawAndAPIPodStatus(*api.Pod) (*RawPodStatus, *api.PodStatus, error)
 	// PullImage pulls an image from the network to local storage using the supplied
 	// secrets if necessary.
 	PullImage(image ImageSpec, pullSecrets []api.Secret) error

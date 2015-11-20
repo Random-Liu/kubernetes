@@ -101,7 +101,7 @@ type DockerManager struct {
 	//      deleted.
 	reasonCache reasonInfoCache
 	// TODO(yifan): Record the pull failure so we can eliminate the image checking
-	// in GetPodStatus()?
+	// in GetAPIPodStatus()?
 	// Lower level docker image puller.
 	dockerPuller DockerPuller
 
@@ -425,18 +425,18 @@ func (dm *DockerManager) inspectContainer(id string, podName, podNamespace strin
 	return &status, "", nil
 }
 
-// GetPodStatus returns docker related status for all containers in the pod
+// GetAPIPodStatus returns docker related status for all containers in the pod
 // spec.
-func (dm *DockerManager) GetPodStatus(pod *api.Pod) (*api.PodStatus, error) {
+func (dm *DockerManager) GetAPIPodStatus(pod *api.Pod) (*api.PodStatus, error) {
 	// Get the raw pod status.
 	rawStatus, err := dm.GetRawPodStatus(pod.UID, pod.Name, pod.Namespace)
 	if err != nil {
 		return nil, err
 	}
-	return dm.ConvertRawToPodStatus(pod, rawStatus)
+	return dm.ConvertRawToAPIPodStatus(pod, rawStatus)
 }
 
-func (dm *DockerManager) ConvertRawToPodStatus(pod *api.Pod, rawStatus *kubecontainer.RawPodStatus) (*api.PodStatus, error) {
+func (dm *DockerManager) ConvertRawToAPIPodStatus(pod *api.Pod, rawStatus *kubecontainer.RawPodStatus) (*api.PodStatus, error) {
 	var podStatus api.PodStatus
 	uid := pod.UID
 
@@ -2093,13 +2093,13 @@ func (dm *DockerManager) GetRawPodStatus(uid types.UID, name, namespace string) 
 	return podStatus, nil
 }
 
-func (dm *DockerManager) GetRawAndAPIPodStatus(pod *api.Pod) (*api.PodStatus, *kubecontainer.RawPodStatus, error) {
+func (dm *DockerManager) GetRawAndAPIPodStatus(pod *api.Pod) (*kubecontainer.RawPodStatus, *api.PodStatus, error) {
 	// Get the raw pod status.
 	rawStatus, err := dm.GetRawPodStatus(pod.UID, pod.Name, pod.Namespace)
 	if err != nil {
 		return nil, nil, err
 	}
 	var podStatus *api.PodStatus
-	podStatus, err = dm.ConvertRawToPodStatus(pod, rawStatus)
-	return podStatus, rawStatus, err
+	podStatus, err = dm.ConvertRawToAPIPodStatus(pod, rawStatus)
+	return rawStatus, podStatus, err
 }

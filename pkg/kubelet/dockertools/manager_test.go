@@ -548,7 +548,7 @@ func runSyncPod(t *testing.T, dm *DockerManager, fakeDocker *FakeDockerClient, p
 	}
 	runningPod := kubecontainer.Pods(runningPods).FindPodByID(pod.UID)
 
-	podStatus, rawPodStatus, err := dm.GetRawAndAPIPodStatus(pod)
+	rawPodStatus, podStatus, err := dm.GetRawAndAPIPodStatus(pod)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -920,7 +920,7 @@ func TestSyncPodWithPullPolicy(t *testing.T) {
 	}
 
 	runSyncPod(t, dm, fakeDocker, pod, nil, true)
-	statuses, err := dm.GetPodStatus(pod)
+	statuses, err := dm.GetAPIPodStatus(pod)
 	if err != nil {
 		t.Errorf("unable to get pod status")
 	}
@@ -1050,7 +1050,7 @@ func TestSyncPodWithRestartPolicy(t *testing.T) {
 	}
 }
 
-func TestGetPodStatusWithLastTermination(t *testing.T) {
+func TestGetAPIPodStatusWithLastTermination(t *testing.T) {
 	dm, fakeDocker := newTestDockerManager()
 	containers := []api.Container{
 		{Name: "succeeded"},
@@ -1131,7 +1131,7 @@ func TestGetPodStatusWithLastTermination(t *testing.T) {
 		runSyncPod(t, dm, fakeDocker, pod, nil, false)
 
 		// Check if we can retrieve the pod status.
-		status, err := dm.GetPodStatus(pod)
+		status, err := dm.GetAPIPodStatus(pod)
 		if err != nil {
 			t.Fatalf("unexpected error %v", err)
 		}
@@ -1273,7 +1273,7 @@ func TestGetPodCreationFailureReason(t *testing.T) {
 
 	runSyncPod(t, dm, fakeDocker, pod, nil, true)
 	// Check if we can retrieve the pod status.
-	status, err := dm.GetPodStatus(pod)
+	status, err := dm.GetAPIPodStatus(pod)
 	if err != nil {
 		t.Fatalf("unexpected error %v", err)
 	}
@@ -1318,7 +1318,7 @@ func TestGetPodPullImageFailureReason(t *testing.T) {
 	}})
 	runSyncPod(t, dm, fakeDocker, pod, nil, true)
 	// Check if we can retrieve the pod status.
-	status, err := dm.GetPodStatus(pod)
+	status, err := dm.GetAPIPodStatus(pod)
 	if err != nil {
 		t.Fatalf("unexpected error %v", err)
 	}
@@ -1355,7 +1355,7 @@ func TestGetRestartCount(t *testing.T) {
 	// Helper function for verifying the restart count.
 	verifyRestartCount := func(pod *api.Pod, expectedCount int) api.PodStatus {
 		runSyncPod(t, dm, fakeDocker, pod, nil, false)
-		status, err := dm.GetPodStatus(pod)
+		status, err := dm.GetAPIPodStatus(pod)
 		if err != nil {
 			t.Fatalf("unexpected error %v", err)
 		}
@@ -1367,7 +1367,7 @@ func TestGetRestartCount(t *testing.T) {
 	}
 
 	killOneContainer := func(pod *api.Pod) {
-		status, err := dm.GetPodStatus(pod)
+		status, err := dm.GetAPIPodStatus(pod)
 		if err != nil {
 			t.Fatalf("unexpected error %v", err)
 		}
@@ -1677,7 +1677,7 @@ func TestSyncPodWithHostNetwork(t *testing.T) {
 	}
 }
 
-func TestGetPodStatusSortedContainers(t *testing.T) {
+func TestGetAPIPodStatusSortedContainers(t *testing.T) {
 	dm, fakeDocker := newTestDockerManager()
 	specContainerList := []api.Container{}
 	expectedOrder := []string{}
@@ -1716,7 +1716,7 @@ func TestGetPodStatusSortedContainers(t *testing.T) {
 		},
 	}
 	for i := 0; i < 5; i++ {
-		status, err := dm.GetPodStatus(pod)
+		status, err := dm.GetAPIPodStatus(pod)
 		if err != nil {
 			t.Fatalf("unexpected error %v", err)
 		}
