@@ -85,7 +85,7 @@ type Runtime interface {
 	// GarbageCollect removes dead containers using the specified container gc policy
 	GarbageCollect(gcPolicy ContainerGCPolicy) error
 	// Syncs the running pod into the desired pod.
-	SyncPod(pod *api.Pod, runningPod Pod, apiPodStatus api.PodStatus, rawPodStatus *RawPodStatus, pullSecrets []api.Secret, backOff *util.Backoff) error
+	SyncPod(pod *api.Pod, runningPod Pod, apiPodStatus api.PodStatus, podStatus *PodStatus, pullSecrets []api.Secret, backOff *util.Backoff) error
 	// KillPod kills all the containers of a pod. Pod may be nil, running pod must not be.
 	KillPod(pod *api.Pod, runningPod Pod) error
 	// GetAPIPodStatus retrieves the api.PodStatus of the pod, including the information of
@@ -93,19 +93,18 @@ type Runtime interface {
 	// containers' statuses in a pod always have a deterministic ordering
 	// (e.g., sorted by name).
 	GetAPIPodStatus(*api.Pod) (*api.PodStatus, error)
-	// GetRawPodStatus retrieves the status of the pod, including the
+	// GetPodStatus retrieves the status of the pod, including the
 	// information of all containers in the pod that are visble in Runtime.
-	// TODO: Rename this to GetPodStatus to replace the original function.
-	GetRawPodStatus(uid types.UID, name, namespace string) (*RawPodStatus, error)
-	// ConvertRawToPodStatus converts the RawPodStatus object to api.PodStatus.
+	GetPodStatus(uid types.UID, name, namespace string) (*PodStatus, error)
+	// ConvertPodStatusToAPIPodStatus converts the PodStatus object to api.PodStatus.
 	// This function is needed because Docker generates some high-level and/or
 	// pod-level information for api.PodStatus (e.g., check whether the image
 	// exists to determine the reason). We should try generalizing the logic
 	// for all container runtimes in kubelet and remove this funciton.
-	ConvertRawToAPIPodStatus(*api.Pod, *RawPodStatus) (*api.PodStatus, error)
-	// Return both api.PodStatus and RawPodStatus, this is just a temporary function.
+	ConvertPodStatusToAPIPodStatus(*api.Pod, *PodStatus) (*api.PodStatus, error)
+	// Return both PodStatus and api.PodStatus, this is just a temporary function.
 	// TODO (random-liu) Remove this interface later
-	GetRawAndAPIPodStatus(*api.Pod) (*RawPodStatus, *api.PodStatus, error)
+	GetPodStatusAndAPIPodStatus(*api.Pod) (*PodStatus, *api.PodStatus, error)
 	// PullImage pulls an image from the network to local storage using the supplied
 	// secrets if necessary.
 	PullImage(image ImageSpec, pullSecrets []api.Secret) error
@@ -218,12 +217,12 @@ type ContainerState string
 const (
 	ContainerStateRunning ContainerState = "running"
 	ContainerStateExited  ContainerState = "exited"
-	// This unknown encompasses all the statuses that we currently don't care.
+	// This unknown encompasses all the states that we currently don't care.
 	ContainerStateUnknown ContainerState = "unknown"
 )
 
 // Container provides the runtime information for a container, such as ID, hash,
-// status of the container.
+// state of the container.
 type Container struct {
 	// The ID of the container, used by the container runtime to identify
 	// a container.
@@ -239,13 +238,13 @@ type Container struct {
 	// The timestamp of the creation time of the container.
 	// TODO(yifan): Consider to move it to api.ContainerStatus.
 	Created int64
-	// Status is the status of the container.
+	// State is the state of the container.
 	State ContainerState
 }
 
-// RawPodStatus represents the status of the pod and its containers.
-// api.PodStatus can be derived from examining RawPodStatus and api.Pod.
-type RawPodStatus struct {
+// PodStatus represents the status of the pod and its containers.
+// api.PodStatus can be derived from examining PodStatus and api.Pod.
+type PodStatus struct {
 	// ID of the pod.
 	ID types.UID
 	// Name of the pod.
@@ -255,11 +254,11 @@ type RawPodStatus struct {
 	// IP of the pod.
 	IP string
 	// Status of containers in the pod.
-	ContainerStatuses []*RawContainerStatus
+	ContainerStatuses []*ContainerStatus
 }
 
-// RawPodContainer represents the status of a container.
-type RawContainerStatus struct {
+// ContainerStatus represents the status of a container.
+type ContainerStatus struct {
 	// ID of the container.
 	ID ContainerID
 	// Name of the container.
@@ -289,9 +288,9 @@ type RawContainerStatus struct {
 	Message string
 }
 
-// FindContainerStatusByName returns raw container status in the raw pod status with the given name.
+// FindContainerStatusByName returns container status in the pod status with the given name.
 // When there are multiple containers' statuses with the same name, the first match will be returned.
-func (podStatus *RawPodStatus) FindContainerStatusByName(containerName string) *RawContainerStatus {
+func (podStatus *PodStatus) FindContainerStatusByName(containerName string) *ContainerStatus {
 	for _, containerStatus := range podStatus.ContainerStatuses {
 		if containerStatus.Name == containerName {
 			return containerStatus
@@ -300,9 +299,9 @@ func (podStatus *RawPodStatus) FindContainerStatusByName(containerName string) *
 	return nil
 }
 
-// Get raw container status of all the running containers in a pod
-func (podStatus *RawPodStatus) GetRunningContainerStatuses() []*RawContainerStatus {
-	runnningContainerStatues := []*RawContainerStatus{}
+// Get container status of all the running containers in a pod
+func (podStatus *PodStatus) GetRunningContainerStatuses() []*ContainerStatus {
+	runnningContainerStatues := []*ContainerStatus{}
 	for _, containerStatus := range podStatus.ContainerStatuses {
 		if containerStatus.State == ContainerStateRunning {
 			runnningContainerStatues = append(runnningContainerStatues, containerStatus)

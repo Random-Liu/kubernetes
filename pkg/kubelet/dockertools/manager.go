@@ -330,7 +330,7 @@ func (dm *DockerManager) determineContainerIP(podNamespace, podName string, cont
 }
 
 // TODO (random-liu) Remove parameter tPath when old containers are deprecated.
-func (dm *DockerManager) inspectContainer(id string, podName, podNamespace string) (*kubecontainer.RawContainerStatus, string, error) {
+func (dm *DockerManager) inspectContainer(id string, podName, podNamespace string) (*kubecontainer.ContainerStatus, string, error) {
 	var ip string
 	iResult, err := dm.client.InspectContainer(id)
 	if err != nil {
@@ -351,7 +351,7 @@ func (dm *DockerManager) inspectContainer(id string, podName, podNamespace strin
 		glog.Errorf("Get restart count error for container %v: %v", id, err)
 	}
 
-	status := kubecontainer.RawContainerStatus{
+	status := kubecontainer.ContainerStatus{
 		Name:         containerName,
 		RestartCount: restartCount,
 		Image:        iResult.Config.Image,
@@ -421,16 +421,16 @@ func (dm *DockerManager) inspectContainer(id string, podName, podNamespace strin
 // GetAPIPodStatus returns docker related status for all containers in the pod
 // spec.
 func (dm *DockerManager) GetAPIPodStatus(pod *api.Pod) (*api.PodStatus, error) {
-	// Get the raw pod status.
-	rawStatus, err := dm.GetRawPodStatus(pod.UID, pod.Name, pod.Namespace)
+	// Get the pod status.
+	podStatus, err := dm.GetPodStatus(pod.UID, pod.Name, pod.Namespace)
 	if err != nil {
 		return nil, err
 	}
-	return dm.ConvertRawToAPIPodStatus(pod, rawStatus)
+	return dm.ConvertPodStatusToAPIPodStatus(pod, podStatus)
 }
 
-func (dm *DockerManager) ConvertRawToAPIPodStatus(pod *api.Pod, rawStatus *kubecontainer.RawPodStatus) (*api.PodStatus, error) {
-	var podStatus api.PodStatus
+func (dm *DockerManager) ConvertPodStatusToAPIPodStatus(pod *api.Pod, podStatus *kubecontainer.PodStatus) (*api.PodStatus, error) {
+	var apiPodStatus api.PodStatus
 	uid := pod.UID
 
 	statuses := make(map[string]*api.ContainerStatus, len(pod.Spec.Containers))
@@ -441,10 +441,10 @@ func (dm *DockerManager) ConvertRawToAPIPodStatus(pod *api.Pod, rawStatus *kubec
 	}
 
 	containerDone := sets.NewString()
-	// NOTE: (random-liu) The Pod IP is generated in kubelet.generatePodStatus(), we have no rawStatus.IP now
-	podStatus.PodIP = rawStatus.IP
-	for _, raw := range rawStatus.ContainerStatuses {
-		cName := raw.Name
+	// NOTE: (random-liu) The Pod IP is generated in kubelet.generatePodStatus(), we have no podStatus.IP now
+	apiPodStatus.PodIP = podStatus.IP
+	for _, containerStatus := range podStatus.ContainerStatuses {
+		cName := containerStatus.Name
 		if _, ok := expectedContainers[cName]; !ok {
 			// This would also ignore the infra container.
 			continue
@@ -452,7 +452,7 @@ func (dm *DockerManager) ConvertRawToAPIPodStatus(pod *api.Pod, rawStatus *kubec
 		if containerDone.Has(cName) {
 			continue
 		}
-		status := rawToAPIContainerStatus(raw)
+		status := containerStatusToAPIContainerStatus(containerStatus)
 		if existing, found := statuses[cName]; found {
 			existing.LastTerminationState = status.State
 			containerDone.Insert(cName)
@@ -516,7 +516,7 @@ func (dm *DockerManager) ConvertRawToAPIPodStatus(pod *api.Pod, rawStatus *kubec
 		statuses[container.Name] = &containerStatus
 	}
 
-	podStatus.ContainerStatuses = make([]api.ContainerStatus, 0)
+	apiPodStatus.ContainerStatuses = make([]api.ContainerStatus, 0)
 	for containerName, status := range statuses {
 		if status.State.Waiting != nil {
 			status.State.Running = nil
@@ -526,14 +526,14 @@ func (dm *DockerManager) ConvertRawToAPIPodStatus(pod *api.Pod, rawStatus *kubec
 				status.State.Waiting.Message = reasonInfo.message
 			}
 		}
-		podStatus.ContainerStatuses = append(podStatus.ContainerStatuses, *status)
+		apiPodStatus.ContainerStatuses = append(apiPodStatus.ContainerStatuses, *status)
 	}
 
 	// Sort the container statuses since clients of this interface expect the list
 	// of containers in a pod to behave like the output of `docker list`, which has a
 	// deterministic order.
-	sort.Sort(kubetypes.SortedContainerStatuses(podStatus.ContainerStatuses))
-	return &podStatus, nil
+	sort.Sort(kubetypes.SortedContainerStatuses(apiPodStatus.ContainerStatuses))
+	return &apiPodStatus, nil
 }
 
 // makeEnvList converts EnvVar list to a list of strings, in the form of
@@ -915,7 +915,7 @@ func (dm *DockerManager) RemoveImage(image kubecontainer.ImageSpec) error {
 }
 
 // podInfraContainerChanged returns true if the pod infra container has changed.
-func (dm *DockerManager) podInfraContainerChanged(pod *api.Pod, podInfraContainerStatus *kubecontainer.RawContainerStatus) (bool, error) {
+func (dm *DockerManager) podInfraContainerChanged(pod *api.Pod, podInfraContainerStatus *kubecontainer.ContainerStatus) (bool, error) {
 	networkMode := ""
 	var ports []api.ContainerPort
 
@@ -1224,7 +1224,7 @@ func (dm *DockerManager) GetContainerIP(containerID, interfaceName string) (stri
 	return string(out), nil
 }
 
-// TODO: (random-liu) Change running pod to raw pod status in the future. We can't do it now, because kubelet also uses this function without raw pod status.
+// TODO: (random-liu) Change running pod to pod status in the future. We can't do it now, because kubelet also uses this function without pod status.
 // We can only deprecate this after refactoring kubelet.
 func (dm *DockerManager) KillPod(pod *api.Pod, runningPod kubecontainer.Pod) error {
 	// Send the kills in parallel since they may take a long time. Len + 1 since there
@@ -1628,7 +1628,7 @@ type PodContainerChangesSpec struct {
 	ContainersToKeep    map[kubetypes.DockerID]int
 }
 
-func (dm *DockerManager) computePodContainerChanges(pod *api.Pod, podStatus *kubecontainer.RawPodStatus) (PodContainerChangesSpec, error) {
+func (dm *DockerManager) computePodContainerChanges(pod *api.Pod, podStatus *kubecontainer.PodStatus) (PodContainerChangesSpec, error) {
 	start := time.Now()
 	defer func() {
 		metrics.ContainerManagerLatency.WithLabelValues("computePodContainerChanges").Observe(metrics.SinceInMicroseconds(start))
@@ -1754,7 +1754,7 @@ func (dm *DockerManager) clearReasonCache(pod *api.Pod, container *api.Container
 }
 
 // Sync the running pod to match the specified desired pod.
-func (dm *DockerManager) SyncPod(pod *api.Pod, _ kubecontainer.Pod, _ api.PodStatus, podStatus *kubecontainer.RawPodStatus, pullSecrets []api.Secret, backOff *util.Backoff) error {
+func (dm *DockerManager) SyncPod(pod *api.Pod, _ kubecontainer.Pod, _ api.PodStatus, podStatus *kubecontainer.PodStatus, pullSecrets []api.Secret, backOff *util.Backoff) error {
 	start := time.Now()
 	defer func() {
 		metrics.ContainerManagerLatency.WithLabelValues("SyncPod").Observe(metrics.SinceInMicroseconds(start))
@@ -1784,7 +1784,7 @@ func (dm *DockerManager) SyncPod(pod *api.Pod, _ kubecontainer.Pod, _ api.PodSta
 
 		// Killing phase: if we want to start new infra container, or nothing is running kill everything (including infra container)
 		// TODO: (random-liu) We'll use pod status directly in the future
-		if err := dm.KillPod(pod, kubecontainer.ConvertRawToRunningPod(podStatus)); err != nil {
+		if err := dm.KillPod(pod, kubecontainer.ConvertPodStatusToRunningPod(podStatus)); err != nil {
 			return err
 		}
 	} else {
@@ -1971,7 +1971,7 @@ func getUidFromUser(id string) string {
 	return id
 }
 
-func (dm *DockerManager) doBackOff(pod *api.Pod, container *api.Container, podStatus *kubecontainer.RawPodStatus, backOff *util.Backoff) bool {
+func (dm *DockerManager) doBackOff(pod *api.Pod, container *api.Container, podStatus *kubecontainer.PodStatus, backOff *util.Backoff) bool {
 	// NOTE: (random-liu) Is there any chance that there is an alive container and still need to do backoff? If not, maybe we should just check the first container
 	containerStatus := podStatus.FindContainerStatusByName(container.Name)
 	if containerStatus != nil && containerStatus.State == kubecontainer.ContainerStateExited && !containerStatus.FinishedAt.IsZero() {
@@ -2033,8 +2033,8 @@ func (dm *DockerManager) GarbageCollect(gcPolicy kubecontainer.ContainerGCPolicy
 	return dm.containerGC.GarbageCollect(gcPolicy)
 }
 
-func (dm *DockerManager) GetRawPodStatus(uid types.UID, name, namespace string) (*kubecontainer.RawPodStatus, error) {
-	podStatus := &kubecontainer.RawPodStatus{ID: uid, Name: name, Namespace: namespace}
+func (dm *DockerManager) GetPodStatus(uid types.UID, name, namespace string) (*kubecontainer.PodStatus, error) {
+	podStatus := &kubecontainer.PodStatus{ID: uid, Name: name, Namespace: namespace}
 	// Now we retain restart count of container as a docker label. Each time a container
 	// restarts, pod will read the restart count from the latest dead container, increment
 	// it to get the new restart count, and then add a label with the new restart count on
@@ -2047,7 +2047,7 @@ func (dm *DockerManager) GetRawPodStatus(uid types.UID, name, namespace string) 
 	//	we can only assume their restart count is 0.
 	// Anyhow, we only promised "best-effort" restart count reporting, we can just ignore
 	// these limitations now.
-	var rawStatuses []*kubecontainer.RawContainerStatus
+	var containerStatuses []*kubecontainer.ContainerStatus
 	// We have added labels like pod name and pod namespace, it seems that we can do filtered list here.
 	// However, there may be some old containers without these labels, so at least now we can't do that.
 	// TODO (random-liu) Do only one list and pass in the list result in the future
@@ -2076,23 +2076,23 @@ func (dm *DockerManager) GetRawPodStatus(uid types.UID, name, namespace string) 
 		if err != nil {
 			return podStatus, err
 		}
-		rawStatuses = append(rawStatuses, result)
+		containerStatuses = append(containerStatuses, result)
 		if ip != "" {
 			podStatus.IP = ip
 		}
 	}
 
-	podStatus.ContainerStatuses = rawStatuses
+	podStatus.ContainerStatuses = containerStatuses
 	return podStatus, nil
 }
 
-func (dm *DockerManager) GetRawAndAPIPodStatus(pod *api.Pod) (*kubecontainer.RawPodStatus, *api.PodStatus, error) {
-	// Get the raw pod status.
-	rawStatus, err := dm.GetRawPodStatus(pod.UID, pod.Name, pod.Namespace)
+func (dm *DockerManager) GetPodStatusAndAPIPodStatus(pod *api.Pod) (*kubecontainer.PodStatus, *api.PodStatus, error) {
+	// Get the pod status.
+	podStatus, err := dm.GetPodStatus(pod.UID, pod.Name, pod.Namespace)
 	if err != nil {
 		return nil, nil, err
 	}
-	var podStatus *api.PodStatus
-	podStatus, err = dm.ConvertRawToAPIPodStatus(pod, rawStatus)
-	return rawStatus, podStatus, err
+	var apiPodStatus *api.PodStatus
+	apiPodStatus, err = dm.ConvertPodStatusToAPIPodStatus(pod, podStatus)
+	return podStatus, apiPodStatus, err
 }

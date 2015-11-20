@@ -1018,7 +1018,7 @@ func (r *Runtime) IsImagePresent(image kubecontainer.ImageSpec) (bool, error) {
 }
 
 // SyncPod syncs the running pod to match the specified desired pod.
-func (r *Runtime) SyncPod(pod *api.Pod, runningPod kubecontainer.Pod, podStatus api.PodStatus, _ *kubecontainer.RawPodStatus, pullSecrets []api.Secret, backOff *util.Backoff) error {
+func (r *Runtime) SyncPod(pod *api.Pod, runningPod kubecontainer.Pod, podStatus api.PodStatus, _ *kubecontainer.PodStatus, pullSecrets []api.Secret, backOff *util.Backoff) error {
 	podFullName := kubeletutil.FormatPodName(pod)
 
 	// Add references to all containers.
@@ -1414,15 +1414,15 @@ func (r *Runtime) RemoveImage(image kubecontainer.ImageSpec) error {
 	return nil
 }
 
-func (r *Runtime) GetRawPodStatus(uid types.UID, name, namespace string) (*kubecontainer.RawPodStatus, error) {
+func (r *Runtime) GetPodStatus(uid types.UID, name, namespace string) (*kubecontainer.PodStatus, error) {
 	return nil, fmt.Errorf("Not implemented yet")
 }
 
-func (r *Runtime) ConvertRawToAPIPodStatus(_ *api.Pod, _ *kubecontainer.RawPodStatus) (*api.PodStatus, error) {
+func (r *Runtime) ConvertPodStatusToAPIPodStatus(_ *api.Pod, _ *kubecontainer.PodStatus) (*api.PodStatus, error) {
 	return nil, fmt.Errorf("Not implemented yet")
 }
 
-func (r *Runtime) GetRawAndAPIPodStatus(pod *api.Pod) (*kubecontainer.RawPodStatus, *api.PodStatus, error) {
+func (r *Runtime) GetPodStatusAndAPIPodStatus(pod *api.Pod) (*kubecontainer.PodStatus, *api.PodStatus, error) {
 	podStatus, err := r.GetAPIPodStatus(pod)
 	return nil, podStatus, err
 

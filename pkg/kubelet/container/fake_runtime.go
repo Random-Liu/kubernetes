@@ -37,7 +37,7 @@ type FakeRuntime struct {
 	AllPodList        []*Pod
 	ImageList         []Image
 	APIPodStatus      api.PodStatus
-	RawPodStatus      RawPodStatus
+	PodStatus         PodStatus
 	StartedPods       []string
 	KilledPods        []string
 	StartedContainers []string
@@ -165,7 +165,7 @@ func (f *FakeRuntime) GetPods(all bool) ([]*Pod, error) {
 	return f.PodList, f.Err
 }
 
-func (f *FakeRuntime) SyncPod(pod *api.Pod, _ Pod, _ api.PodStatus, _ *RawPodStatus, _ []api.Secret, backOff *util.Backoff) error {
+func (f *FakeRuntime) SyncPod(pod *api.Pod, _ Pod, _ api.PodStatus, _ *PodStatus, _ []api.Secret, backOff *util.Backoff) error {
 	f.Lock()
 	defer f.Unlock()
 
@@ -232,33 +232,33 @@ func (f *FakeRuntime) GetAPIPodStatus(*api.Pod) (*api.PodStatus, error) {
 	return &status, f.Err
 }
 
-func (f *FakeRuntime) GetRawPodStatus(uid types.UID, name, namespace string) (*RawPodStatus, error) {
+func (f *FakeRuntime) GetPodStatus(uid types.UID, name, namespace string) (*PodStatus, error) {
 	f.Lock()
 	defer f.Unlock()
 
-	f.CalledFunctions = append(f.CalledFunctions, "GetRawPodStatus")
-	status := f.RawPodStatus
+	f.CalledFunctions = append(f.CalledFunctions, "GetPodStatus")
+	status := f.PodStatus
 	return &status, f.Err
 }
 
-func (f *FakeRuntime) ConvertRawToAPIPodStatus(_ *api.Pod, _ *RawPodStatus) (*api.PodStatus, error) {
+func (f *FakeRuntime) ConvertPodStatusToAPIPodStatus(_ *api.Pod, _ *PodStatus) (*api.PodStatus, error) {
 	f.Lock()
 	defer f.Unlock()
 
-	f.CalledFunctions = append(f.CalledFunctions, "ConvertRawToAPIPodStatus")
+	f.CalledFunctions = append(f.CalledFunctions, "ConvertPodStatusToAPIPodStatus")
 	status := f.APIPodStatus
 	return &status, f.Err
 }
 
-func (f *FakeRuntime) GetRawAndAPIPodStatus(_ *api.Pod) (*RawPodStatus, *api.PodStatus, error) {
+func (f *FakeRuntime) GetPodStatusAndAPIPodStatus(_ *api.Pod) (*PodStatus, *api.PodStatus, error) {
 	f.Lock()
 	defer f.Unlock()
 
 	// This is only a temporary function, it should be logged as GetAPIPodStatus
 	f.CalledFunctions = append(f.CalledFunctions, "GetAPIPodStatus")
 	apiPodStatus := f.APIPodStatus
-	rawStatus := f.RawPodStatus
-	return &rawStatus, &apiPodStatus, f.Err
+	podStatus := f.PodStatus
+	return &podStatus, &apiPodStatus, f.Err
 }
 
 func (f *FakeRuntime) ExecInContainer(containerID ContainerID, cmd []string, stdin io.Reader, stdout, stderr io.WriteCloser, tty bool) error {

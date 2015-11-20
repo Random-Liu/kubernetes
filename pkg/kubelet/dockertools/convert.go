@@ -81,26 +81,26 @@ func toRuntimeImage(image *docker.APIImages) (*kubecontainer.Image, error) {
 	}, nil
 }
 
-// convert RawContainerStatus to api.ContainerStatus.
-func rawToAPIContainerStatus(raw *kubecontainer.RawContainerStatus) *api.ContainerStatus {
-	containerID := DockerPrefix + raw.ID.ID
+// convert ContainerStatus to api.ContainerStatus.
+func containerStatusToAPIContainerStatus(containerStatus *kubecontainer.ContainerStatus) *api.ContainerStatus {
+	containerID := DockerPrefix + containerStatus.ID.ID
 	status := api.ContainerStatus{
-		Name:         raw.Name,
-		RestartCount: raw.RestartCount,
-		Image:        raw.Image,
-		ImageID:      raw.ImageID,
+		Name:         containerStatus.Name,
+		RestartCount: containerStatus.RestartCount,
+		Image:        containerStatus.Image,
+		ImageID:      containerStatus.ImageID,
 		ContainerID:  containerID,
 	}
-	switch raw.State {
+	switch containerStatus.State {
 	case kubecontainer.ContainerStateRunning:
-		status.State.Running = &api.ContainerStateRunning{StartedAt: unversioned.NewTime(raw.StartedAt)}
+		status.State.Running = &api.ContainerStateRunning{StartedAt: unversioned.NewTime(containerStatus.StartedAt)}
 	case kubecontainer.ContainerStateExited:
 		status.State.Terminated = &api.ContainerStateTerminated{
-			ExitCode:    raw.ExitCode,
-			Reason:      raw.Reason,
-			Message:     raw.Message,
-			StartedAt:   unversioned.NewTime(raw.StartedAt),
-			FinishedAt:  unversioned.NewTime(raw.FinishedAt),
+			ExitCode:    containerStatus.ExitCode,
+			Reason:      containerStatus.Reason,
+			Message:     containerStatus.Message,
+			StartedAt:   unversioned.NewTime(containerStatus.StartedAt),
+			FinishedAt:  unversioned.NewTime(containerStatus.FinishedAt),
 			ContainerID: containerID,
 		}
 	default:

@@ -43,11 +43,11 @@ type RunContainerOptionsGenerator interface {
 
 // ShouldContainerBeRestarted checks whether a container needs to be restarted.
 // TODO(yifan): Think about how to refactor this.
-func ShouldContainerBeRestarted(container *api.Container, pod *api.Pod, podStatus *RawPodStatus) bool {
+func ShouldContainerBeRestarted(container *api.Container, pod *api.Pod, podStatus *PodStatus) bool {
 	podFullName := GetPodFullName(pod)
 
 	// Get all dead container status.
-	var resultStatus []*RawContainerStatus
+	var resultStatus []*ContainerStatus
 	for _, containerStatus := range podStatus.ContainerStatuses {
 		if containerStatus.Name == container.Name && containerStatus.State == ContainerStateExited {
 			resultStatus = append(resultStatus, containerStatus)
@@ -102,8 +102,8 @@ func ShouldContainerBeRestartedOldVersion(container *api.Container, pod *api.Pod
 	return true
 }
 
-// TODO (random-liu) Convert RawPodStatus to running Pod, should be deprecated soon
-func ConvertRawToRunningPod(podStatus *RawPodStatus) Pod {
+// TODO (random-liu) Convert PodStatus to running Pod, should be deprecated soon
+func ConvertPodStatusToRunningPod(podStatus *PodStatus) Pod {
 	runningPod := Pod{
 		ID:        podStatus.ID,
 		Name:      podStatus.Name,
