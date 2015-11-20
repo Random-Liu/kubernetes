@@ -43,7 +43,37 @@ type RunContainerOptionsGenerator interface {
 
 // ShouldContainerBeRestarted checks whether a container needs to be restarted.
 // TODO(yifan): Think about how to refactor this.
-func ShouldContainerBeRestarted(container *api.Container, pod *api.Pod, podStatus *api.PodStatus) bool {
+func ShouldContainerBeRestarted(container *api.Container, pod *api.Pod, podStatus *RawPodStatus) bool {
+	podFullName := GetPodFullName(pod)
+
+	// Get all dead container status.
+	var resultStatus []*RawContainerStatus
+	for _, containerStatus := range podStatus.ContainerStatuses {
+		if containerStatus.Name == container.Name && containerStatus.Status == ContainerStatusExited {
+			resultStatus = append(resultStatus, containerStatus)
+		}
+	}
+
+	// Check RestartPolicy for dead container.
+	if len(resultStatus) > 0 {
+		if pod.Spec.RestartPolicy == api.RestartPolicyNever {
+			glog.V(4).Infof("Already ran container %q of pod %q, do nothing", container.Name, podFullName)
+			return false
+		}
+		if pod.Spec.RestartPolicy == api.RestartPolicyOnFailure {
+			// Check the exit code of last run. Note: This assumes the result is sorted
+			// by the created time in reverse order.
+			if resultStatus[0].ExitCode == 0 {
+				glog.V(4).Infof("Already successfully ran container %q of pod %q, do nothing", container.Name, podFullName)
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// TODO(random-liu) This should be deprecated soon
+func ShouldContainerBeRestartedOldVersion(container *api.Container, pod *api.Pod, podStatus *api.PodStatus) bool {
 	podFullName := GetPodFullName(pod)
 
 	// Get all dead container status.

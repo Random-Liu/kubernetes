@@ -930,7 +930,7 @@ func TestSyncPodWithPullPolicy(t *testing.T) {
 			if containerStatus.State.Running != nil && expectedStatusMap[c.Name].Running != nil {
 				expectedStatusMap[c.Name].Running.StartedAt = containerStatus.State.Running.StartedAt
 			}
-			assert.Equal(t, containerStatus.State, expectedStatusMap[c.Name], "for container %s", c.Name)
+			assert.Equal(t, expectedStatusMap[c.Name], containerStatus.State, "for container %s", c.Name)
 		}
 	}
 

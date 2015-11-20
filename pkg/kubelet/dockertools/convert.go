@@ -77,7 +77,7 @@ func toRuntimeImage(image *docker.APIImages) (*kubecontainer.Image, error) {
 	}, nil
 }
 
-// convert RawContainerSTatus to api.ContainerStatus.
+// convert RawContainerStatus to api.ContainerStatus.
 func rawToAPIContainerStatus(raw *kubecontainer.RawContainerStatus) *api.ContainerStatus {
 	containerID := DockerPrefix + raw.ID.ID
 	status := api.ContainerStatus{

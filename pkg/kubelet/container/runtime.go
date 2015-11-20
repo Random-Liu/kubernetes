@@ -282,7 +282,7 @@ type RawContainerStatus struct {
 	// ID of the image.
 	ImageID string
 	// Hash of the container, used for comparison.
-	Hash string
+	Hash uint64
 	// Number of times that the container has been restarted.
 	RestartCount int
 	// A string explains why container is in such a status.
@@ -290,6 +290,17 @@ type RawContainerStatus struct {
 	// Message written by the container before exiting (stored in
 	// TerminationMessagePath).
 	Message string
+}
+
+// FindContainerStatusByName returns raw container status in the raw pod status with the given name.
+// When there are multiple containers' statuses with the same name, the first match will be returned.
+func (podStatus *RawPodStatus) FindContainerStatusByName(containerName string) *RawContainerStatus {
+	for _, containerStatus := range podStatus.ContainerStatuses {
+		if containerStatus.Name == containerName {
+			return containerStatus
+		}
+	}
+	return nil
 }
 
 // Basic information about a container image.
