@@ -213,13 +213,13 @@ func (c *ContainerID) UnmarshalJSON(data []byte) error {
 	return c.ParseString(string(data))
 }
 
-type ContainerStatus string
+type ContainerState string
 
 const (
-	ContainerStatusRunning ContainerStatus = "running"
-	ContainerStatusExited  ContainerStatus = "exited"
+	ContainerStateRunning ContainerState = "running"
+	ContainerStateExited  ContainerState = "exited"
 	// This unknown encompasses all the statuses that we currently don't care.
-	ContainerStatusUnknown ContainerStatus = "unknown"
+	ContainerStateUnknown ContainerState = "unknown"
 )
 
 // Container provides the runtime information for a container, such as ID, hash,
@@ -240,7 +240,7 @@ type Container struct {
 	// TODO(yifan): Consider to move it to api.ContainerStatus.
 	Created int64
 	// Status is the status of the container.
-	Status ContainerStatus
+	State ContainerState
 }
 
 // RawPodStatus represents the status of the pod and its containers.
@@ -265,7 +265,7 @@ type RawContainerStatus struct {
 	// Name of the container.
 	Name string
 	// Status of the container.
-	Status ContainerStatus
+	State ContainerState
 	// Creation time of the container.
 	CreatedAt time.Time
 	// Start time of the container.
@@ -304,7 +304,7 @@ func (podStatus *RawPodStatus) FindContainerStatusByName(containerName string) *
 func (podStatus *RawPodStatus) GetRunningContainerStatuses() []*RawContainerStatus {
 	runnningContainerStatues := []*RawContainerStatus{}
 	for _, containerStatus := range podStatus.ContainerStatuses {
-		if containerStatus.Status == ContainerStatusRunning {
+		if containerStatus.State == ContainerStateRunning {
 			runnningContainerStatues = append(runnningContainerStatues, containerStatus)
 		}
 	}

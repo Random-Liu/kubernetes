@@ -49,7 +49,7 @@ func ShouldContainerBeRestarted(container *api.Container, pod *api.Pod, podStatu
 	// Get all dead container status.
 	var resultStatus []*RawContainerStatus
 	for _, containerStatus := range podStatus.ContainerStatuses {
-		if containerStatus.Name == container.Name && containerStatus.Status == ContainerStatusExited {
+		if containerStatus.Name == container.Name && containerStatus.State == ContainerStateExited {
 			resultStatus = append(resultStatus, containerStatus)
 		}
 	}
@@ -110,7 +110,7 @@ func ConvertRawToRunningPod(podStatus *RawPodStatus) Pod {
 		Namespace: podStatus.Namespace,
 	}
 	for _, containerStatus := range podStatus.ContainerStatuses {
-		if containerStatus.Status != ContainerStatusRunning {
+		if containerStatus.State != ContainerStateRunning {
 			continue
 		}
 		container := &Container{
@@ -119,7 +119,7 @@ func ConvertRawToRunningPod(podStatus *RawPodStatus) Pod {
 			Image:   containerStatus.Image,
 			Hash:    containerStatus.Hash,
 			Created: containerStatus.CreatedAt.Unix(),
-			Status:  containerStatus.Status,
+			State:   containerStatus.State,
 		}
 		runningPod.Containers = append(runningPod.Containers, container)
 	}

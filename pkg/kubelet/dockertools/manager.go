@@ -307,13 +307,6 @@ var (
 	ErrContainerCannotRun = errors.New("ContainerCannotRun")
 )
 
-// Internal information kept for containers from inspection
-type containerStatusResult struct {
-	status api.ContainerStatus
-	ip     string
-	err    error
-}
-
 // determineContainerIP determines the IP address of the given container.  It is expected
 // that the container passed is the infrastructure container of a pod and the responsibility
 // of the caller to ensure that the correct container is passed.
@@ -369,7 +362,7 @@ func (dm *DockerManager) inspectContainer(id string, podName, podNamespace strin
 		Hash:         hash,
 	}
 	if iResult.State.Running {
-		status.Status = kubecontainer.ContainerStatusRunning
+		status.State = kubecontainer.ContainerStateRunning
 		status.StartedAt = iResult.State.StartedAt
 		if containerName == PodInfraContainerName {
 			ip = dm.determineContainerIP(podNamespace, podName, iResult)
@@ -412,7 +405,7 @@ func (dm *DockerManager) inspectContainer(id string, podName, podNamespace strin
 				}
 			}
 		}
-		status.Status = kubecontainer.ContainerStatusExited
+		status.State = kubecontainer.ContainerStateExited
 		status.Message = message
 		status.Reason = reason
 		status.StartedAt = startedAt
@@ -420,7 +413,7 @@ func (dm *DockerManager) inspectContainer(id string, podName, podNamespace strin
 	} else {
 		// Non-running containers that are not terminatd could be pasued, or created (but not yet
 		// started), etc. Kubelet doen't handle these scenarios yet.
-		status.Status = kubecontainer.ContainerStatusUnknown
+		status.State = kubecontainer.ContainerStateUnknown
 	}
 	return &status, "", nil
 }
@@ -1652,7 +1645,7 @@ func (dm *DockerManager) computePodContainerChanges(pod *api.Pod, podStatus *kub
 	var podInfraContainerID kubetypes.DockerID
 	var changed bool
 	podInfraContainerStatus := podStatus.FindContainerStatusByName(PodInfraContainerName)
-	if podInfraContainerStatus != nil && podInfraContainerStatus.Status == kubecontainer.ContainerStatusRunning {
+	if podInfraContainerStatus != nil && podInfraContainerStatus.State == kubecontainer.ContainerStateRunning {
 		glog.V(4).Infof("Found pod infra container for %q", podFullName)
 		changed, err = dm.podInfraContainerChanged(pod, podInfraContainerStatus)
 		if err != nil {
@@ -1661,7 +1654,7 @@ func (dm *DockerManager) computePodContainerChanges(pod *api.Pod, podStatus *kub
 	}
 
 	createPodInfraContainer := true
-	if podInfraContainerStatus == nil || podInfraContainerStatus.Status != kubecontainer.ContainerStatusRunning {
+	if podInfraContainerStatus == nil || podInfraContainerStatus.State != kubecontainer.ContainerStateRunning {
 		glog.V(2).Infof("Need to restart pod infra container for %q because it is not found", podFullName)
 	} else if changed {
 		glog.V(2).Infof("Need to restart pod infra container for %q because it is changed", podFullName)
@@ -1676,7 +1669,7 @@ func (dm *DockerManager) computePodContainerChanges(pod *api.Pod, podStatus *kub
 		expectedHash := kubecontainer.HashContainer(&container)
 
 		containerStatus := podStatus.FindContainerStatusByName(container.Name)
-		if containerStatus == nil || containerStatus.Status != kubecontainer.ContainerStatusRunning {
+		if containerStatus == nil || containerStatus.State != kubecontainer.ContainerStateRunning {
 			if kubecontainer.ShouldContainerBeRestarted(&container, pod, podStatus) {
 				// If we are here it means that the container is dead and should be restarted, or never existed and should
 				// be created. We may be inserting this ID again if the container has changed and it has
@@ -1981,7 +1974,7 @@ func getUidFromUser(id string) string {
 func (dm *DockerManager) doBackOff(pod *api.Pod, container *api.Container, podStatus *kubecontainer.RawPodStatus, backOff *util.Backoff) bool {
 	// NOTE: (random-liu) Is there any chance that there is an alive container and still need to do backoff? If not, maybe we should just check the first container
 	containerStatus := podStatus.FindContainerStatusByName(container.Name)
-	if containerStatus != nil && containerStatus.Status == kubecontainer.ContainerStatusExited && !containerStatus.FinishedAt.IsZero() {
+	if containerStatus != nil && containerStatus.State == kubecontainer.ContainerStateExited && !containerStatus.FinishedAt.IsZero() {
 		ts := containerStatus.FinishedAt
 		// found a container that requires backoff
 		dockerName := KubeletContainerName{

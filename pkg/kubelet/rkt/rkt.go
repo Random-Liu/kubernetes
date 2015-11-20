@@ -793,14 +793,14 @@ func (r *Runtime) GetPods(all bool) ([]*kubecontainer.Pod, error) {
 	var pods []*kubecontainer.Pod
 	for _, u := range units {
 		if strings.HasPrefix(u.Name, kubernetesUnitPrefix) {
-			var status kubecontainer.ContainerStatus
+			var state kubecontainer.ContainerState
 			switch {
 			case u.SubState == "running":
-				status = kubecontainer.ContainerStatusRunning
+				state = kubecontainer.ContainerStateRunning
 			default:
-				status = kubecontainer.ContainerStatusExited
+				state = kubecontainer.ContainerStateExited
 			}
-			if !all && status != kubecontainer.ContainerStatusRunning {
+			if !all && state != kubecontainer.ContainerStateRunning {
 				continue
 			}
 			pod, _, err := r.readServiceFile(u.Name)
@@ -809,7 +809,7 @@ func (r *Runtime) GetPods(all bool) ([]*kubecontainer.Pod, error) {
 				continue
 			}
 			for _, c := range pod.Containers {
-				c.Status = status
+				c.State = state
 			}
 			pods = append(pods, pod)
 		}

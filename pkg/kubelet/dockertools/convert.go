@@ -30,16 +30,16 @@ import (
 // This file contains helper functions to convert docker API types to runtime
 // (kubecontainer) types.
 
-func mapStatus(status string) kubecontainer.ContainerStatus {
-	// Parse the status string in docker.APIContainers. This could break when
+func mapState(state string) kubecontainer.ContainerState {
+	// Parse the state string in docker.APIContainers. This could break when
 	// we upgrade docker.
 	switch {
-	case strings.HasPrefix(status, "Up"):
-		return kubecontainer.ContainerStatusRunning
-	case strings.HasPrefix(status, "Exited"):
-		return kubecontainer.ContainerStatusExited
+	case strings.HasPrefix(state, "Up"):
+		return kubecontainer.ContainerStateRunning
+	case strings.HasPrefix(state, "Exited"):
+		return kubecontainer.ContainerStateExited
 	default:
-		return kubecontainer.ContainerStatusUnknown
+		return kubecontainer.ContainerStateUnknown
 	}
 }
 
@@ -60,7 +60,11 @@ func toRuntimeContainer(c *docker.APIContainers) (*kubecontainer.Container, erro
 		Image:   c.Image,
 		Hash:    hash,
 		Created: c.Created,
-		Status:  mapStatus(c.Status),
+		// (random-liu) docker uses status to indicate whether a container is running or exited.
+		// However, in kubernetes we usually use state to indicate whether a container is running or exited,
+		// while use status to indicate the comprehensive status of the container. So we have different naming
+		// norm here.
+		State: mapState(c.Status),
 	}, nil
 }
 
@@ -87,10 +91,10 @@ func rawToAPIContainerStatus(raw *kubecontainer.RawContainerStatus) *api.Contain
 		ImageID:      raw.ImageID,
 		ContainerID:  containerID,
 	}
-	switch raw.Status {
-	case kubecontainer.ContainerStatusRunning:
+	switch raw.State {
+	case kubecontainer.ContainerStateRunning:
 		status.State.Running = &api.ContainerStateRunning{StartedAt: unversioned.NewTime(raw.StartedAt)}
-	case kubecontainer.ContainerStatusExited:
+	case kubecontainer.ContainerStateExited:
 		status.State.Terminated = &api.ContainerStateTerminated{
 			ExitCode:    raw.ExitCode,
 			Reason:      raw.Reason,
