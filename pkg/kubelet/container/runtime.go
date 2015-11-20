@@ -303,6 +303,17 @@ func (podStatus *RawPodStatus) FindContainerStatusByName(containerName string) *
 	return nil
 }
 
+// Get raw container status of all the running containers in a pod
+func (podStatus *RawPodStatus) GetRunningContainerStatuses() []*RawContainerStatus {
+	runnningContainerStatues := []*RawContainerStatus{}
+	for _, containerStatus := range podStatus.ContainerStatuses {
+		if containerStatus.Status == ContainerStatusRunning {
+			runnningContainerStatues = append(runnningContainerStatues, containerStatus)
+		}
+	}
+	return runnningContainerStatues
+}
+
 // Basic information about a container image.
 type Image struct {
 	// ID of the image.

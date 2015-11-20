@@ -72,7 +72,7 @@ func ShouldContainerBeRestarted(container *api.Container, pod *api.Pod, podStatu
 	return true
 }
 
-// TODO(random-liu) This should be deprecated soon
+// TODO (random-liu) This should be deprecated soon
 func ShouldContainerBeRestartedOldVersion(container *api.Container, pod *api.Pod, podStatus *api.PodStatus) bool {
 	podFullName := GetPodFullName(pod)
 
@@ -100,6 +100,30 @@ func ShouldContainerBeRestartedOldVersion(container *api.Container, pod *api.Pod
 		}
 	}
 	return true
+}
+
+// TODO (random-liu) Convert RawPodStatus to running Pod, should be deprecated soon
+func ConvertRawToRunningPod(podStatus *RawPodStatus) Pod {
+	runningPod := Pod{
+		ID:        podStatus.ID,
+		Name:      podStatus.Name,
+		Namespace: podStatus.Namespace,
+	}
+	for _, containerStatus := range podStatus.ContainerStatuses {
+		if containerStatus.Status != ContainerStatusRunning {
+			continue
+		}
+		container := &Container{
+			ID:      containerStatus.ID,
+			Name:    containerStatus.Name,
+			Image:   containerStatus.Image,
+			Hash:    containerStatus.Hash,
+			Created: containerStatus.CreatedAt.Unix(),
+			Status:  containerStatus.Status,
+		}
+		runningPod.Containers = append(runningPod.Containers, container)
+	}
+	return runningPod
 }
 
 // HashContainer returns the hash of the container. It is used to compare

@@ -922,11 +922,11 @@ func (dm *DockerManager) RemoveImage(image kubecontainer.ImageSpec) error {
 }
 
 // podInfraContainerChanged returns true if the pod infra container has changed.
-func (dm *DockerManager) podInfraContainerChanged(pod *api.Pod, podInfraContainer *kubecontainer.Container) (bool, error) {
+func (dm *DockerManager) podInfraContainerChanged(pod *api.Pod, podInfraContainerStatus *kubecontainer.RawContainerStatus) (bool, error) {
 	networkMode := ""
 	var ports []api.ContainerPort
 
-	dockerPodInfraContainer, err := dm.client.InspectContainer(podInfraContainer.ID.ID)
+	dockerPodInfraContainer, err := dm.client.InspectContainer(podInfraContainerStatus.ID.ID)
 	if err != nil {
 		return false, err
 	}
@@ -953,7 +953,7 @@ func (dm *DockerManager) podInfraContainerChanged(pod *api.Pod, podInfraContaine
 		Ports:           ports,
 		ImagePullPolicy: podInfraContainerImagePullPolicy,
 	}
-	return podInfraContainer.Hash != kubecontainer.HashContainer(expectedPodInfraContainer), nil
+	return podInfraContainerStatus.Hash != kubecontainer.HashContainer(expectedPodInfraContainer), nil
 }
 
 type dockerVersion docker.APIVersion
@@ -1231,7 +1231,8 @@ func (dm *DockerManager) GetContainerIP(containerID, interfaceName string) (stri
 	return string(out), nil
 }
 
-// Kills all containers in the specified pod
+// TODO: (random-liu) Change running pod to raw pod status in the future. We can't do it now, because kubelet also uses this function without raw pod status.
+// We can only deprecate this after refactoring kubelet.
 func (dm *DockerManager) KillPod(pod *api.Pod, runningPod kubecontainer.Pod) error {
 	// Send the kills in parallel since they may take a long time. Len + 1 since there
 	// can be Len errors + the networkPlugin teardown error.
@@ -1634,7 +1635,7 @@ type PodContainerChangesSpec struct {
 	ContainersToKeep    map[kubetypes.DockerID]int
 }
 
-func (dm *DockerManager) computePodContainerChanges(pod *api.Pod, runningPod kubecontainer.Pod, podStatus *kubecontainer.RawPodStatus) (PodContainerChangesSpec, error) {
+func (dm *DockerManager) computePodContainerChanges(pod *api.Pod, podStatus *kubecontainer.RawPodStatus) (PodContainerChangesSpec, error) {
 	start := time.Now()
 	defer func() {
 		metrics.ContainerManagerLatency.WithLabelValues("computePodContainerChanges").Observe(metrics.SinceInMicroseconds(start))
@@ -1650,32 +1651,32 @@ func (dm *DockerManager) computePodContainerChanges(pod *api.Pod, runningPod kub
 	var err error
 	var podInfraContainerID kubetypes.DockerID
 	var changed bool
-	podInfraContainer := runningPod.FindContainerByName(PodInfraContainerName)
-	if podInfraContainer != nil {
+	podInfraContainerStatus := podStatus.FindContainerStatusByName(PodInfraContainerName)
+	if podInfraContainerStatus != nil && podInfraContainerStatus.Status == kubecontainer.ContainerStatusRunning {
 		glog.V(4).Infof("Found pod infra container for %q", podFullName)
-		changed, err = dm.podInfraContainerChanged(pod, podInfraContainer)
+		changed, err = dm.podInfraContainerChanged(pod, podInfraContainerStatus)
 		if err != nil {
 			return PodContainerChangesSpec{}, err
 		}
 	}
 
 	createPodInfraContainer := true
-	if podInfraContainer == nil {
+	if podInfraContainerStatus == nil || podInfraContainerStatus.Status != kubecontainer.ContainerStatusRunning {
 		glog.V(2).Infof("Need to restart pod infra container for %q because it is not found", podFullName)
 	} else if changed {
 		glog.V(2).Infof("Need to restart pod infra container for %q because it is changed", podFullName)
 	} else {
 		glog.V(4).Infof("Pod infra container looks good, keep it %q", podFullName)
 		createPodInfraContainer = false
-		podInfraContainerID = kubetypes.DockerID(podInfraContainer.ID.ID)
+		podInfraContainerID = kubetypes.DockerID(podInfraContainerStatus.ID.ID)
 		containersToKeep[podInfraContainerID] = -1
 	}
 
 	for index, container := range pod.Spec.Containers {
 		expectedHash := kubecontainer.HashContainer(&container)
 
-		c := runningPod.FindContainerByName(container.Name)
-		if c == nil {
+		containerStatus := podStatus.FindContainerStatusByName(container.Name)
+		if containerStatus == nil || containerStatus.Status != kubecontainer.ContainerStatusRunning {
 			if kubecontainer.ShouldContainerBeRestarted(&container, pod, podStatus) {
 				// If we are here it means that the container is dead and should be restarted, or never existed and should
 				// be created. We may be inserting this ID again if the container has changed and it has
@@ -1687,8 +1688,8 @@ func (dm *DockerManager) computePodContainerChanges(pod *api.Pod, runningPod kub
 			continue
 		}
 
-		containerID := kubetypes.DockerID(c.ID.ID)
-		hash := c.Hash
+		containerID := kubetypes.DockerID(containerStatus.ID.ID)
+		hash := containerStatus.Hash
 		glog.V(3).Infof("pod %q container %q exists as %v", podFullName, container.Name, containerID)
 
 		if createPodInfraContainer {
@@ -1714,7 +1715,7 @@ func (dm *DockerManager) computePodContainerChanges(pod *api.Pod, runningPod kub
 			continue
 		}
 
-		liveness, found := dm.livenessManager.Get(c.ID)
+		liveness, found := dm.livenessManager.Get(containerStatus.ID)
 		if !found || liveness == proberesults.Success {
 			containersToKeep[containerID] = index
 			continue
@@ -1760,7 +1761,7 @@ func (dm *DockerManager) clearReasonCache(pod *api.Pod, container *api.Container
 }
 
 // Sync the running pod to match the specified desired pod.
-func (dm *DockerManager) SyncPod(pod *api.Pod, runningPod kubecontainer.Pod, _ api.PodStatus, podStatus *kubecontainer.RawPodStatus, pullSecrets []api.Secret, backOff *util.Backoff) error {
+func (dm *DockerManager) SyncPod(pod *api.Pod, _ kubecontainer.Pod, _ api.PodStatus, podStatus *kubecontainer.RawPodStatus, pullSecrets []api.Secret, backOff *util.Backoff) error {
 	start := time.Now()
 	defer func() {
 		metrics.ContainerManagerLatency.WithLabelValues("SyncPod").Observe(metrics.SinceInMicroseconds(start))
@@ -1768,7 +1769,7 @@ func (dm *DockerManager) SyncPod(pod *api.Pod, runningPod kubecontainer.Pod, _ a
 
 	podFullName := kubecontainer.GetPodFullName(pod)
 
-	containerChanges, err := dm.computePodContainerChanges(pod, runningPod, podStatus)
+	containerChanges, err := dm.computePodContainerChanges(pod, podStatus)
 	if err != nil {
 		return err
 	}
@@ -1789,26 +1790,29 @@ func (dm *DockerManager) SyncPod(pod *api.Pod, runningPod kubecontainer.Pod, _ a
 		}
 
 		// Killing phase: if we want to start new infra container, or nothing is running kill everything (including infra container)
-		if err := dm.KillPod(pod, runningPod); err != nil {
+		// TODO: (random-liu) We'll use pod status directly in the future
+		if err := dm.KillPod(pod, kubecontainer.ConvertRawToRunningPod(podStatus)); err != nil {
 			return err
 		}
 	} else {
-		// Otherwise kill any containers in this pod which are not specified as ones to keep.
-		for _, container := range runningPod.Containers {
-			_, keep := containerChanges.ContainersToKeep[kubetypes.DockerID(container.ID.ID)]
+		// Otherwise kill any running containers in this pod which are not specified as ones to keep.
+		runningContainerStatues := podStatus.GetRunningContainerStatuses()
+		for _, containerStatus := range runningContainerStatues {
+			_, keep := containerChanges.ContainersToKeep[kubetypes.DockerID(containerStatus.ID.ID)]
 			if !keep {
-				glog.V(3).Infof("Killing unwanted container %+v", container)
+				// NOTE: (random-liu) Just log ID or log container status here?
+				glog.V(3).Infof("Killing unwanted container %+v", containerStatus)
 				// attempt to find the appropriate container policy
 				var podContainer *api.Container
 				var killMessage string
 				for i, c := range pod.Spec.Containers {
-					if c.Name == container.Name {
+					if c.Name == containerStatus.Name {
 						podContainer = &pod.Spec.Containers[i]
 						killMessage = containerChanges.ContainersToStart[i]
 						break
 					}
 				}
-				if err := dm.KillContainerInPod(container.ID, podContainer, pod, killMessage); err != nil {
+				if err := dm.KillContainerInPod(containerStatus.ID, podContainer, pod, killMessage); err != nil {
 					glog.Errorf("Error killing container: %v", err)
 					return err
 				}
