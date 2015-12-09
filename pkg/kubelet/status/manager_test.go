@@ -645,10 +645,12 @@ func TestReconcilePodStatus(t *testing.T) {
 	}
 	testPod.Status = podStatus
 
+	// The logic in ReconcilePodStatus() is very simple, just sending a message to the channel.
+	// So we'll just verify the internal reconcilePod() function here.
 	// If the pod status is the same, reconcile is not needed
 	// apiStatusVersions shouldn't be cleared
 	// syncBatch should do nothing
-	syncer.ReconcilePodStatus(testPod)
+	syncer.reconcilePod(testPod)
 	if _, ok := syncer.apiStatusVersions[testPod.UID]; !ok {
 		t.Errorf("Reconcile is not needed, apiStatusVersions shouldn't be cleared here")
 	}
@@ -659,7 +661,7 @@ func TestReconcilePodStatus(t *testing.T) {
 	// If the pod status is going to be updated, reconcile is not needed
 	// The apiStatusVersions shouldn't been cleared here
 	syncer.SetPodStatus(testPod, getRandomPodStatus())
-	syncer.ReconcilePodStatus(testPod)
+	syncer.reconcilePod(testPod)
 	if _, ok := syncer.apiStatusVersions[testPod.UID]; !ok {
 		t.Errorf("Reconcile is not needed, apiStatusVersions shouldn't be cleared here")
 	}
@@ -668,7 +670,7 @@ func TestReconcilePodStatus(t *testing.T) {
 	testPod.Status = getRandomPodStatus()
 	// If the pod status is different, reconcile should be triggered
 	// An update should be triggered
-	syncer.ReconcilePodStatus(testPod)
+	syncer.reconcilePod(testPod)
 	if _, ok := syncer.apiStatusVersions[testPod.UID]; ok {
 		t.Errorf("Reconcile is needed, apiStatusVersions should be cleared here")
 	}
