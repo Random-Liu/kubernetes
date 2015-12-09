@@ -78,6 +78,10 @@ type Manager interface {
 	// SetPodStatus caches updates the cached status for the given pod, and triggers a status update.
 	SetPodStatus(pod *api.Pod, status api.PodStatus)
 
+	// ReconcilePodStatus compares the cached status with the status from the source. If they are different,
+	// a status update will be triggered, because kubelet should be the source of truth of the status.
+	ReconcilePodStatus(pod *api.Pod)
+
 	// SetContainerReadiness updates the cached container status with the given readiness, and
 	// triggers a status update.
 	SetContainerReadiness(pod *api.Pod, containerID kubecontainer.ContainerID, ready bool)
@@ -148,6 +152,34 @@ func (m *manager) SetPodStatus(pod *api.Pod, status api.PodStatus) {
 	defer m.podStatusesLock.Unlock()
 
 	m.updateStatusInternal(pod, status)
+}
+
+func (m *manager) ReconcilePodStatus(pod *api.Pod) {
+	m.podStatusesLock.Lock()
+	defer m.podStatusesLock.Unlock()
+
+	// The pod could be a mirror pod, so we should translate first.
+	uid := m.podManager.TranslatePodUID(pod.UID)
+	status, found := m.podStatuses[uid]
+	if !found {
+		// NOTE: (random-liu) What if no status? Is there any chance that this would happen?
+		glog.Warningf("Container to be reconciled has been removed in status cache: %q", format.Pod(pod))
+		return
+	}
+	if isStatusEqual(&status.status, &pod.Status) {
+		// If the status from the source is the same with the cached status,
+		// reconcile is not needed. Just return.
+		return
+	}
+	if m.needsUpdate(pod.UID, status) {
+		// The pod is going to be updated, the conflict will be reconciled after updating
+		return
+	}
+	// We should trigger an reconcile here
+	// After deleting the corresponding apiStatusVersions, the pod status will be updated in next syncBatch
+	// NOTE: (random-liu) Is apiStatusVersions-1 or status version +1 better?
+	delete(m.apiStatusVersions, pod.UID)
+	// NOTE: (random-liu) Should we trigger a sync immediately here?
 }
 
 func (m *manager) SetContainerReadiness(pod *api.Pod, containerID kubecontainer.ContainerID, ready bool) {

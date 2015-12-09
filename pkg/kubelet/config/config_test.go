@@ -17,6 +17,7 @@ limitations under the License.
 package config
 
 import (
+	"reflect"
 	"sort"
 	"testing"
 
@@ -105,7 +106,7 @@ func expectPodUpdate(t *testing.T, ch <-chan kubetypes.PodUpdate, expected ...ku
 		// Compare pods one by one. This is necessary beacuse we don't want to
 		// compare local annotations.
 		for j := range expected[i].Pods {
-			if podsDifferSemantically(expected[i].Pods[j], update.Pods[j]) {
+			if podsDifferSemantically(expected[i].Pods[j], update.Pods[j]) || !reflect.DeepEqual(expected[i].Pods[j].Status, update.Pods[j].Status) {
 				t.Fatalf("Expected %#v, Got %#v", expected[i].Pods[j], update.Pods[j])
 			}
 		}
@@ -267,6 +268,49 @@ func TestNewPodAddedUpdatedSet(t *testing.T) {
 		CreatePodUpdate(kubetypes.UPDATE, TestSource, pod))
 }
 
+func TestNewPodAddedReconciled(t *testing.T) {
+	channel, ch, _ := createPodConfigTester(PodConfigNotificationIncremental)
+	podUpdate := CreatePodUpdate(kubetypes.ADD, TestSource, CreateValidPod("foo", "new"), CreateValidPod("foo2", "new"), CreateValidPod("foo3", "new"))
+	channel <- podUpdate
+	expectPodUpdate(t, ch, CreatePodUpdate(kubetypes.ADD, TestSource, CreateValidPod("foo", "new"), CreateValidPod("foo2", "new"), CreateValidPod("foo3", "new")))
+
+	// If status is not changed, no reconcile should be triggered
+	podUpdate = CreatePodUpdate(kubetypes.ADD, TestSource, CreateValidPod("foo", "new"), CreateValidPod("foo2", "new"), CreateValidPod("foo3", "new"))
+	channel <- podUpdate
+	expectNoPodUpdate(t, ch)
+
+	// If the pod status is changed and not updated, a reconcile should be triggered
+	podWithStatusChange := CreateValidPod("foo2", "new")
+	podWithStatusChange.Status = api.PodStatus{Message: "changed first time"}
+	podUpdateWithStatusChange := CreatePodUpdate(kubetypes.ADD, TestSource, CreateValidPod("foo", "new"), podWithStatusChange, CreateValidPod("foo3", "new"))
+	channel <- podUpdateWithStatusChange
+	expectPodUpdate(t, ch, CreatePodUpdate(kubetypes.RECONCILE, TestSource, podWithStatusChange))
+
+	// If the pod status is changed, but the pod is also updated, no reconcile should be triggered
+	podWithStatusChange = CreateValidPod("foo2", "new")
+	podWithStatusChange.Status = api.PodStatus{Message: "changed second time"}
+	podWithStatusChange.Spec.Containers = []api.Container{{Name: "bar", Image: "test", ImagePullPolicy: api.PullIfNotPresent}}
+	podUpdateWithStatusChange = CreatePodUpdate(kubetypes.ADD, TestSource, CreateValidPod("foo", "new"), podWithStatusChange, CreateValidPod("foo3", "new"))
+	channel <- podUpdateWithStatusChange
+	expectPodUpdate(t, ch, CreatePodUpdate(kubetypes.UPDATE, TestSource, podWithStatusChange))
+
+	// If the pod status is changed and not updated, a reconcile should be triggered
+	podWithStatusChange = CreateValidPod("foo2", "new")
+	podWithStatusChange.Status = api.PodStatus{Message: "changed third time"}
+	podWithStatusChange.Spec.Containers = []api.Container{{Name: "bar", Image: "test", ImagePullPolicy: api.PullIfNotPresent}}
+	podUpdateWithStatusChange = CreatePodUpdate(kubetypes.ADD, TestSource, CreateValidPod("foo", "new"), podWithStatusChange, CreateValidPod("foo3", "new"))
+	channel <- podUpdateWithStatusChange
+	expectPodUpdate(t, ch, CreatePodUpdate(kubetypes.RECONCILE, TestSource, podWithStatusChange))
+
+	// If the pod status is changed, but the pod is also updated, no reconcile should be triggered
+	podWithStatusChange = CreateValidPod("foo2", "new")
+	podWithStatusChange.Status = api.PodStatus{Message: "changed fourth time"}
+	podWithStatusChange.Spec.Containers = []api.Container{{Name: "bar1", Image: "test", ImagePullPolicy: api.PullIfNotPresent}}
+	podUpdateWithStatusChange = CreatePodUpdate(kubetypes.ADD, TestSource, CreateValidPod("foo", "new"), podWithStatusChange, CreateValidPod("foo3", "new"))
+	channel <- podUpdateWithStatusChange
+	expectPodUpdate(t, ch, CreatePodUpdate(kubetypes.UPDATE, TestSource, podWithStatusChange))
+}
+
 func TestInitialEmptySet(t *testing.T) {
 	for _, test := range []struct {
 		mode PodConfigNotificationMode
@@ -324,7 +368,7 @@ func TestPodUpdateAnnotations(t *testing.T) {
 	expectPodUpdate(t, ch, CreatePodUpdate(kubetypes.UPDATE, TestSource, pod))
 }
 
-func TestPodUpdateLables(t *testing.T) {
+func TestPodUpdateLabels(t *testing.T) {
 	channel, ch, _ := createPodConfigTester(PodConfigNotificationIncremental)
 
 	pod := CreateValidPod("foo2", "new")

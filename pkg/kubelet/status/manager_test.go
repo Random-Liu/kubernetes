@@ -632,6 +632,58 @@ func TestSyncBatchCleanupVersions(t *testing.T) {
 	}
 }
 
+func TestReconcilePodStatus(t *testing.T) {
+	client := testclient.NewSimpleFake(testPod)
+	syncer := newTestManager(client)
+	syncer.SetPodStatus(testPod, getRandomPodStatus())
+	syncer.syncBatch() // The apiStatusVersions should be set now
+
+	originalStatus := testPod.Status
+	podStatus, ok := syncer.GetPodStatus(testPod.UID)
+	if !ok {
+		t.Fatal("Should find pod status for pod: %+v", testPod)
+	}
+	testPod.Status = podStatus
+
+	// If the pod status is the same, reconcile is not needed
+	// apiStatusVersions shouldn't be cleared
+	// syncBatch should do nothing
+	syncer.ReconcilePodStatus(testPod)
+	if _, ok := syncer.apiStatusVersions[testPod.UID]; !ok {
+		t.Errorf("Reconcile is not needed, apiStatusVersions shouldn't be cleared here")
+	}
+	client.ClearActions()
+	syncer.syncBatch()
+	verifyActions(t, client, []testclient.Action{})
+
+	// If the pod status is going to be updated, reconcile is not needed
+	// The apiStatusVersions shouldn't been cleared here
+	syncer.SetPodStatus(testPod, getRandomPodStatus())
+	syncer.ReconcilePodStatus(testPod)
+	if _, ok := syncer.apiStatusVersions[testPod.UID]; !ok {
+		t.Errorf("Reconcile is not needed, apiStatusVersions shouldn't be cleared here")
+	}
+	syncer.syncBatch() // The apiStatusVersions should be set again now
+
+	testPod.Status = getRandomPodStatus()
+	// If the pod status is different, reconcile should be triggered
+	// An update should be triggered
+	syncer.ReconcilePodStatus(testPod)
+	if _, ok := syncer.apiStatusVersions[testPod.UID]; ok {
+		t.Errorf("Reconcile is needed, apiStatusVersions should be cleared here")
+	}
+	client.ClearActions()
+	syncer.syncBatch()
+	verifyActions(t, client, []testclient.Action{
+		testclient.GetActionImpl{ActionImpl: testclient.ActionImpl{Verb: "get", Resource: "pods"}},
+		testclient.UpdateActionImpl{ActionImpl: testclient.ActionImpl{Verb: "update", Resource: "pods", Subresource: "status"}},
+	})
+
+	// Just in case that testPod is shared among different test functions, set it back.
+	// NOTE: (random-liu) Is this neccesary?
+	testPod.Status = originalStatus
+}
+
 func expectPodStatus(t *testing.T, m *manager, pod *api.Pod) api.PodStatus {
 	status, ok := m.GetPodStatus(pod.UID)
 	if !ok {
