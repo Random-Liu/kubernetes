@@ -40,7 +40,7 @@ const (
 	// Pods with the given ids have been updated in this source
 	UPDATE
 	// Pods with the given ids have unexpected status in this source,
-	// kubelet should reconile status with this source
+	// kubelet should reconcile status with this source
 	RECONCILE
 
 	// These constants identify the sources of pods

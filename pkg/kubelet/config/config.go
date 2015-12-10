@@ -167,7 +167,7 @@ func (s *podStorage) Merge(source string, change interface{}) error {
 		if len(updates.Pods) > 0 {
 			s.updates <- *updates
 		}
-		// Only add concile support here, because kubelet doesn't support Snapshot update now.
+		// Only add reconcile support here, because kubelet doesn't support Snapshot update now.
 		if len(reconciles.Pods) > 0 {
 			s.updates <- *reconciles
 		}
