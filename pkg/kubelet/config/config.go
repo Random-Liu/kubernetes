@@ -198,10 +198,10 @@ func (s *podStorage) merge(source string, change interface{}) (adds, updates, de
 	s.podLock.Lock()
 	defer s.podLock.Unlock()
 
-	adds = &kubetypes.PodUpdate{Op: kubetypes.ADD, Source: source}
-	updates = &kubetypes.PodUpdate{Op: kubetypes.UPDATE, Source: source}
-	deletes = &kubetypes.PodUpdate{Op: kubetypes.REMOVE, Source: source}
-	reconciles = &kubetypes.PodUpdate{Op: kubetypes.RECONCILE, Source: source}
+	addPods := []*api.Pod{}
+	updatePods := []*api.Pod{}
+	deletePods := []*api.Pod{}
+	reconcilePods := []*api.Pod{}
 
 	pods := s.pods[source]
 	if pods == nil {
@@ -228,16 +228,16 @@ func (s *podStorage) merge(source string, change interface{}) (adds, updates, de
 			if existing, found := pods[name]; found {
 				needUpdate, needReconcile := checkAndUpdatePod(existing, ref)
 				if needUpdate {
-					updates.Pods = append(updates.Pods, existing)
+					updatePods = append(updatePods, existing)
 				} else if needReconcile {
-					reconciles.Pods = append(reconciles.Pods, existing)
+					reconcilePods = append(reconcilePods, existing)
 				}
 				continue
 			}
 			// this is an add
 			recordFirstSeenTime(ref)
 			pods[name] = ref
-			adds.Pods = append(adds.Pods, ref)
+			addPods = append(addPods, ref)
 		}
 
 	case kubetypes.REMOVE:
@@ -247,7 +247,7 @@ func (s *podStorage) merge(source string, change interface{}) (adds, updates, de
 			if existing, found := pods[name]; found {
 				// this is a delete
 				delete(pods, name)
-				deletes.Pods = append(deletes.Pods, existing)
+				deletePods = append(deletePods, existing)
 				continue
 			}
 			// this is a no-op
@@ -272,21 +272,21 @@ func (s *podStorage) merge(source string, change interface{}) (adds, updates, de
 				pods[name] = existing
 				needUpdate, needReconcile := checkAndUpdatePod(existing, ref)
 				if needUpdate {
-					updates.Pods = append(updates.Pods, existing)
+					updatePods = append(updatePods, existing)
 				} else if needReconcile {
-					reconciles.Pods = append(reconciles.Pods, existing)
+					reconcilePods = append(reconcilePods, existing)
 				}
 				continue
 			}
 			recordFirstSeenTime(ref)
 			pods[name] = ref
-			adds.Pods = append(adds.Pods, ref)
+			addPods = append(addPods, ref)
 		}
 
 		for name, existing := range oldPods {
 			if _, found := pods[name]; !found {
 				// this is a delete
-				deletes.Pods = append(deletes.Pods, existing)
+				deletePods = append(deletePods, existing)
 			}
 		}
 
@@ -296,6 +296,15 @@ func (s *podStorage) merge(source string, change interface{}) (adds, updates, de
 	}
 
 	s.pods[source] = pods
+
+	// Sharing object between config and kubelet is very dangerous, because config may
+	// modify the pod when kubelet or other components is using it. So we need to copy
+	// each pod before passing to kubelet.
+	adds = &kubetypes.PodUpdate{Op: kubetypes.ADD, Pods: copyPods(addPods), Source: source}
+	updates = &kubetypes.PodUpdate{Op: kubetypes.UPDATE, Pods: copyPods(updatePods), Source: source}
+	deletes = &kubetypes.PodUpdate{Op: kubetypes.REMOVE, Pods: copyPods(deletePods), Source: source}
+	reconciles = &kubetypes.PodUpdate{Op: kubetypes.RECONCILE, Pods: copyPods(reconcilePods), Source: source}
+
 	return adds, updates, deletes, reconciles
 }
 
@@ -420,7 +429,6 @@ func podsDifferSemantically(existing, ref *api.Pod) bool {
 //   * if ref makes no meaningful change, but changes the pod status, returns needReconcile=true
 //   * else return both false
 //   Now, needUpdate and needReconcile should never be both true
-//   NOTE: (random-liu) Any suggestions for the code format here, what is the best practice?
 func checkAndUpdatePod(existing, ref *api.Pod) (needUpdate, needReconcile bool) {
 	// TODO: it would be better to update the whole object and only preserve certain things
 	//       like the source annotation or the UID (to ensure safety)
@@ -486,4 +494,17 @@ func bestPodIdentString(pod *api.Pod) string {
 		name = "<empty-name>"
 	}
 	return fmt.Sprintf("%s.%s", name, namespace)
+}
+
+func copyPods(sourcePods []*api.Pod) []*api.Pod {
+	pods := []*api.Pod{}
+	for _, source := range sourcePods {
+		// Use a deep copy here just in case
+		pod, err := api.Scheme.Copy(source)
+		if err != nil {
+			glog.Errorf("unable to copy pod: %v", err)
+		}
+		pods = append(pods, pod.(*api.Pod))
+	}
+	return pods
 }
