@@ -136,8 +136,8 @@ func (m *manager) Start() {
 		select {
 		case syncRequest := <-m.podStatusChannel:
 			m.syncPod(syncRequest.podUID, syncRequest.status)
-		case podToReconcile := <-m.podReconcileChannel:
-			m.reconcilePod(podToReconcile)
+		case pod := <-m.podReconcileChannel:
+			m.reconcilePod(pod)
 		case <-syncTicker:
 			m.syncBatch()
 		}
@@ -159,7 +159,39 @@ func (m *manager) SetPodStatus(pod *api.Pod, status api.PodStatus) {
 }
 
 func (m *manager) ReconcilePodStatus(pod *api.Pod) {
-	// NOTE: (random-liu) Is it acceptable here to block kubelet for a short time when the channel is full?
+	m.podStatusesLock.RLock()
+
+	// The pod could be a mirror pod, so we should translate first.
+	uid := m.podManager.TranslatePodUID(pod.UID)
+	status, found := m.podStatuses[uid]
+	if !found {
+		// Now status manager ensures that cached status will never been deleted before it is deleted on the apiserver (See SyncPod()).
+		// So in one situation this may happen:
+		//   1) kubelet updates status
+		//   2) kubelet deletes pod from the apiserver, and the corresponding entry in the status cache
+		//   3) kubelet receives the status update 1) from watch
+		//   4) kubelet sees the pod been removed from watch
+		// But in this situation, no reconcile is needed.
+		glog.V(4).Infof("Pod %q has been deleted on the apiserver, no need to reconcile", format.Pod(pod))
+		m.podStatusesLock.RUnlock()
+		return
+	}
+	if isStatusEqual(&status.status, &pod.Status) {
+		// If the status from the source is the same with the cached status,
+		// reconcile is not needed. Just return.
+		m.podStatusesLock.RUnlock()
+		return
+	}
+	m.podStatusesLock.RUnlock()
+
+	// Block here when the channel is full will not cause deadlock, because we have released the lock we hold.
+	// However, because this function is called by kubelet now, we never want to block kubelet. We should try to
+	// avoid blocking here. For example, we should check pod status and only send pod which really need reconcile
+	// into the channel.
+	// TODO: (random-liu)
+	//   * Add metric here (and other places in the status manager) to measure the channel length.
+	//   * Do some benchmark to figure out whether this is a problem
+	//   * Another option is using a lock here.
 	m.podReconcileChannel <- pod
 }
 
@@ -398,33 +430,7 @@ func (m *manager) syncPod(uid types.UID, status versionedPodStatus) {
 }
 
 func (m *manager) reconcilePod(pod *api.Pod) {
-	m.podStatusesLock.RLock()
-	defer m.podStatusesLock.RUnlock()
-
-	// The pod could be a mirror pod, so we should translate first.
-	uid := m.podManager.TranslatePodUID(pod.UID)
-	status, found := m.podStatuses[uid]
-	if !found {
-		// Now status manager ensures that cached status will never been deleted before it is deleted on the apiserver (See SyncPod()).
-		// So in one situation this may happen:
-		//   1) kubelet updates status
-		//   2) kubelet deletes pod from the apiserver, and the corresponding entry in the status cache
-		//   3) kubelet receives the status update 1) from watch
-		//   4) kubelet sees the pod been removed from watch
-		// But in this situation, no reconcile is needed.
-		glog.V(4).Infof("Pod %q has been deleted on the apiserver, no need to reconcile", format.Pod(pod))
-		return
-	}
-	if isStatusEqual(&status.status, &pod.Status) {
-		// If the status from the source is the same with the cached status,
-		// reconcile is not needed. Just return.
-		return
-	}
-	if m.needsUpdate(pod.UID, status) {
-		// The pod is going to be updated, the conflict will be reconciled after updating
-		return
-	}
-	// We should trigger an reconcile here
+	// We should trigger a reconciliation here
 	// After deleting the corresponding apiStatusVersions, the pod status will be updated in next syncBatch
 	// We delete apiStatusVersions instead of increasing status version number here, because if there is an
 	// update on the fly, inceasing status version number may trigger an extra update in syncBatch()
