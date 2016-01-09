@@ -250,6 +250,21 @@ var _ = Describe("Density [Skipped]", func() {
 			stop := make(chan struct{})
 			go controller.Run(stop)
 
+			// Create a listener for api updates
+			updateCount := 0
+			cache.NewReflector(
+				// Listen pod update from all nodes
+				cache.NewListWatchFromClient(c, "pods", api.NamespaceAll, fields.Everything()),
+				&api.Pod{},
+				cache.NewUndeltaStore(
+					func(objs []interface{}) {
+						updateCount++
+					},
+					cache.MetaNamespaceKeyFunc,
+				),
+				0,
+			).RunUntil(stop)
+
 			// Start the replication controller.
 			startTime := time.Now()
 			expectNoError(RunRC(config))
@@ -259,10 +274,14 @@ var _ = Describe("Density [Skipped]", func() {
 			By("Waiting for all events to be recorded")
 			last := -1
 			current := len(events)
+			lastCount := -1
+			currentCount := updateCount
 			timeout := 10 * time.Minute
-			for start := time.Now(); last < current && time.Since(start) < timeout; time.Sleep(10 * time.Second) {
+			for start := time.Now(); (last < current || lastCount < currentCount) && time.Since(start) < timeout; time.Sleep(10 * time.Second) {
 				last = current
 				current = len(events)
+				lastCount = currentCount
+				currentCount = updateCount
 			}
 			close(stop)
 
@@ -270,6 +289,7 @@ var _ = Describe("Density [Skipped]", func() {
 				Logf("Warning: Not all events were recorded after waiting %.2f minutes", timeout.Minutes())
 			}
 			Logf("Found %d events", current)
+			Logf("Found %d updates", updateCount)
 
 			// Tune the threshold for allowed failures.
 			badEvents := BadEvents(events)
