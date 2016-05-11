@@ -115,6 +115,14 @@ test_e2e_node:
 	hack/e2e-node-test.sh
 .PHONY: test_e2e_node
 
+# Build and run node docker-validation tests.
+#
+# Example:
+#   make test_docker_validation
+test_docker_validation:
+	hack/docker-validation-test.sh
+.PHONY: test_docker_validation
+
 # Remove all build artifacts.
 #
 # Example:
