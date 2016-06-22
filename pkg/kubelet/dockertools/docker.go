@@ -320,7 +320,7 @@ func ConnectToDockerOrDie(dockerEndpoint string) DockerInterface {
 	if err != nil {
 		glog.Fatalf("Couldn't connect to docker: %v", err)
 	}
-	return newKubeDockerClient(client)
+	return NewKubeDockerClient(client)
 }
 
 // milliCPUToQuota converts milliCPU to CFS quota and period values

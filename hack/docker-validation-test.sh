@@ -16,7 +16,7 @@
 
 KUBE_ROOT=$(dirname "${BASH_SOURCE}")/..
 source "${KUBE_ROOT}/hack/lib/init.sh"
-kube::golang::setup_env
+#kube::golang::setup_env
 
 ginkgo=$(kube::util::find-binary "ginkgo")
 if [[ -z "${ginkgo}" ]]; then
@@ -24,9 +24,8 @@ if [[ -z "${ginkgo}" ]]; then
   exit 1
 fi
 
-sudo -v
-"${ginkgo}" "${KUBE_ROOT}/test/docker_validation/conformance"
-sudo -v
+#sudo -v
+#"${ginkgo}" "${KUBE_ROOT}/test/docker_validation/conformance"
 "${ginkgo}" "${KUBE_ROOT}/test/docker_validation/performance"
 
 # Provided for backwards compatibility

@@ -72,8 +72,8 @@ const (
 	defaultImagePullingStuckTimeout = 1 * time.Minute
 )
 
-// newKubeDockerClient creates an kubeDockerClient from an existing docker client.
-func newKubeDockerClient(dockerClient *dockerapi.Client) DockerInterface {
+// NewKubeDockerClient creates an kubeDockerClient from an existing docker client.
+func NewKubeDockerClient(dockerClient *dockerapi.Client) DockerInterface {
 	return &kubeDockerClient{
 		client: dockerClient,
 	}

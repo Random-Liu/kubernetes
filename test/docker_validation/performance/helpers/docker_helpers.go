@@ -25,36 +25,50 @@ import (
 
 	docker "github.com/fsouza/go-dockerclient"
 	"github.com/juju/ratelimit"
+
+	"k8s.io/kubernetes/pkg/util"
 )
 
+const testImage string = "busybox:1.24"
+
 func newContainerName() string {
-	return "benchmark_container_" + strconv.FormatInt(time.Now().UnixNano(), 10) + strconv.Itoa(rand.Int())
+	return "benchmark_container_" + string(util.NewUUID())
+}
+
+func PullImage(client *docker.Client) error {
+	resp, err := d.client.ImagePull(getContext(), TestImage, types.ImagePullOptions{})
+	if err != nil {
+		panic(fmt.Sprintf("Error pulling image: %v", err))
+		return
+	}
+	defer resp.Close()
+	// TODO(random-liu): Use the image pulling progress information.
+	decoder := json.NewDecoder(resp)
+	for {
+		var msg dockermessage.JSONMessage
+		err := decoder.Decode(&msg)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			panic(fmt.Sprintf("Error decoding image pulling progress: %v", err))
+		}
+		if msg.Error != nil {
+			panic(fmt.Sprintf("Error during image pulling: %v", err))
+		}
+	}
 }
 
 // CreateContainers creates num of containers
-func CreateContainers(client *docker.Client, num int) []string {
-	ids := []string{}
-	for i := 0; i < num; i++ {
-		name := newContainerName()
-		dockerOpts := docker.CreateContainerOptions{
-			Name: name,
-			Config: &docker.Config{
-				AttachStderr: false,
-				AttachStdin:  false,
-				AttachStdout: false,
-				Tty:          true,
-				Cmd:          []string{"/bin/bash"},
-				// TODO(random-liu): Make this configurable.
-				Image: "busybox",
-			},
-		}
-		container, err := client.CreateContainer(dockerOpts)
-		if err != nil {
-			panic(fmt.Sprintf("Error create containers: %v", err))
-		}
-		ids = append(ids, container.ID)
+func CreateContainer(client *docker.Client) (string, error) {
+	dockerOpts := docker.CreateContainerOptions{
+		Name: newContainerName(),
+		Config: &docker.Config{
+			Cmd:   []string{"/bin/sh"},
+			Image: testImage,
+		},
 	}
-	return ids
+	return client.CreateContainer(dockerOpts)
 }
 
 // StartContainers starts all the containers in ids slice
