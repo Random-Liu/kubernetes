@@ -415,9 +415,10 @@ func (ds *dockerService) ContainerStatus(containerID string) (*runtimeapi.Contai
 		imageName = ir.RepoTags[0]
 	}
 	return &runtimeapi.ContainerStatus{
-		Id:          r.ID,
-		Metadata:    metadata,
-		Image:       &runtimeapi.ImageSpec{Image: imageName},
+		Id:       r.ID,
+		Metadata: metadata,
+		Image:    &runtimeapi.ImageSpec{Image: imageName},
+		// Expose pullable image id in container status.
 		ImageRef:    imageID,
 		Mounts:      mounts,
 		ExitCode:    exitCode,
