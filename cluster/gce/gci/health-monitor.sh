@@ -28,7 +28,7 @@ function docker_monitoring {
   while [ 1 ]; do
     if ! timeout 60 docker ps > /dev/null; then
       echo "Docker daemon failed!"
-      pkill docker
+      pkill -x dockerd
       # Wait for a while, as we don't want to kill it again before it is really up.
       sleep 120
     else
@@ -48,7 +48,7 @@ function kubelet_monitoring {
       # Print the response and/or errors.
       echo $output
       echo "Kubelet is unhealthy!"
-      pkill kubelet
+      pkill -x kubelet
       # Wait for a while, as we don't want to kill it again before it is really up.
       sleep 60
     else
