@@ -213,7 +213,8 @@ while($true) {
     # this node in-between when we clear out the authorized_keys file and when
     # we write keys to it. Oh well.
     $user_keys_file = -join($user_dir, "\.ssh\authorized_keys")
-    New-Item -ItemType file -Force $user_keys_file | Out-Null
+    $user_keys_file_new= $user_keys_file + ".new"
+    New-Item -ItemType file -Force $user_keys_file_new | Out-Null
 
     # New for v7.9.0.0: administrators_authorized_keys file. For permission
     # information see
@@ -230,10 +231,20 @@ while($true) {
       # authorized_keys and other ssh config files must be UTF-8 encoded:
       # https://github.com/PowerShell/Win32-OpenSSH/issues/862
       # https://github.com/PowerShell/Win32-OpenSSH/wiki/Various-Considerations
-      Add-Content -Encoding UTF8 $user_keys_file $ssh_key
+      Add-Content -Encoding UTF8 $user_keys_file_new $ssh_key
       Add-Content -Encoding UTF8 $administrator_keys_file $ssh_key
     }
   }
+
+  if (diff $(Get-Content -Path $user_keys_file) $(Get-Content -Path $user_keys_file_new)) {
+    $user_keys_file_temp = $user_keys_file + ".tmp"
+    Rename-Item -Path $user_keys_file -NewName $user_keys_file_temp
+    Rename-Item -Path $user_keys_file_new -NewName $user_keys_file
+    Remove-Item $user_keys_file_temp
+  } else {
+    Remove-Item $user_keys_file_new
+  }
+
   Start-Sleep -sec $poll_interval
 }'.replace('USER_PROFILE_MODULE', $USER_PROFILE_MODULE)
   Log-Output ("${WRITE_SSH_KEYS_SCRIPT}:`n" +
