@@ -138,8 +138,14 @@ try {
     Restart-LoggingAgent
   }
 
-  Create-DockerRegistryKey
-  Configure-Dockerd
+  DownloadAndInstall-Crictl
+  if (${env:CONTAINER_RUNTIME} -eq "containerd") {
+    Install-Containerd
+    Start-Containerd
+  } else {
+    Create-DockerRegistryKey
+    Configure-Dockerd
+  }
   Pull-InfraContainer
   DownloadAndInstall-KubernetesBinaries
   Create-NodePki
@@ -147,7 +153,11 @@ try {
   Create-KubeproxyKubeconfig
   Set-PodCidr
   Configure-HostNetworkingService
-  Configure-CniNetworking
+  if (${env:CONTAINER_RUNTIME} -eq "containerd") {
+    Configure-Containerd-CniNetworking
+  } else {
+    Configure-CniNetworking
+  }
   Configure-HostDnsConf
   Configure-GcePdTools
   Configure-Kubelet
@@ -158,6 +168,7 @@ try {
   Verify-WorkerServices
 
   $config = New-FileRotationConfig
+  # TODO(random-liu): Generate containerd log into the log directory.
   Schedule-LogRotation -Pattern '.*\.log$' -Path ${env:LOGS_DIR} -RepetitionInterval $(New-Timespan -Hour 1) -Config $config
 }
 catch {

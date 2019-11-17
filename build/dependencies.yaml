@@ -85,3 +85,5 @@ dependencies:
       match: CRI_TOOLS_VERSION =
     - path: cluster/gce/gci/configure.sh
       match: DEFAULT_CRICTL_VERSION=
+    - path: cluster/gce/windows/cluster/gce/windows/k8s-node-setup.psm1
+      match: CRICTL_VERSION=
